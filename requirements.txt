@@ -1,0 +1,8 @@
+sklearn
+scipy
+shapely
+Pillow
+click
+numpy
+geojson
+Rtree
