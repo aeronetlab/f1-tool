@@ -4,7 +4,7 @@ Geographic data F1-score metric calculation utility
 
 ## Features
 
-* Object- and pixelwise scores
+* Object- and pixelwise scores, and point-to-object score
 * Supported formats:
   * GeoTIFF
   * GeoJSON
@@ -13,70 +13,62 @@ Geographic data F1-score metric calculation utility
 
 ## Metric
 
-Based on the metric used in SpaceNet Challenge
+Objectwise metric is based on the metric used in SpaceNet Challenge
 https://medium.com/the-downlinq/the-spacenet-metric-612183cc2ddb
+
+Pixelwise metric is plain F1 score:
+F1 = 2\*precision\*recall/(precision + recall)
+
+Point metric is calculated similar to objectwise, but instead of IoU > Threshold the 
+condition for positive detection is when centroid of the detected object lies within the polygon
+of a ground truth object
 
 ## Pre-requisites
 
+This is a server app that is hosted in the docker (dockerfile provided)
 ### Any OS
 
-* Python 3
-
-### Windows
-
-* Download latest Python 3 from https://www.python.org/downloads/windows/. As of today the latest is Python 3.7, installer for x64 architecture is https://www.python.org/ftp/python/3.7.0/python-3.7.0-amd64.exe
-* Run command prompt as Administrator and execute `python -m pip install --upgrade pip`
-* Run `pip install wheel`
-* Download Windows binaries from https://www.lfd.uci.edu/~gohlke/pythonlibs/ for libraries Shapely and Rtree, for python 3.7 and x64 architecture they are Shapely‑1.6.4.post1‑cp37‑cp37m‑win_amd64.whl and Rtree‑0.8.3‑cp37‑cp37m‑win_amd64.whl, respectively.
-* `pip install Shapely‑1.6.4.post1‑cp37‑cp37m‑win_amd64.whl`
-* `pip install Rtree‑0.8.3‑cp37‑cp37m‑win_amd64.whl`
-
+* docker 17+
 
 ## Setup
-Create new virtual environment with Python 3 or use system one.
-* `pip install -r requirements.txt`
-
-## Usage
-Usage example:
+* build docker image:
 ```bash
-python f1_utility.py \
+docker build -t f1_server .
+```
+* run docker containter:
+```bash
+docker run -d -p <outer_port>:5000 f1_server
+```
+## Usage
+
+The server accepts HTTP POST requests in the following form:
+* parameters: 
+    
+    * format:raster|vector|point, 
+    * iou: float from 0 to 1, default 0.5
+    * timestamp: for request identification, POSIX timestamp
+    * v: boolean True/False for verbose output
+* request body:
+    * files = {'file': [zip file]}
+where zip file is an archive containing groundtruth and prediction files:
+<b>gt.tif</b> and <b>pred.tif</b> in case of 'raster' format, 
+and <b>gt.geojson</b> and <b>pred.geojson</b> in case of 'vector' or 'point' format
+
+Request example:
+```bash
+curl -X POST url:port/f1?format=vector&iou=0.5&timestamp=1543932176.827446?v=True \
     tests/data/ventura/ventura_class_801.geojson \
     tests/data/ventura/ventura_class_801_pred.geojson \
     --format=vector -v
 ```
 
 Available formats are
-* raster: compares two `*.tiff` and measures pixelwise f1 score
+* raster: compares two `*.tif` and measures pixelwise f1 score
 * vector: compares two `*.geojson` and measures objectwise f1 score
 
-Consult help for actual arguments:
-```bash
-python f1_utility.py --help
-```
-
-```bash
-Usage: f1_utility.py [OPTIONS] GROUNDTRUTH_PATH PREDICTED_PATH
-
-Options:
-  --format [raster|vector]      [required]
-  --multiproc / --no-multiproc  Enables/disables multiprocessing for
-                                objectwise score. Enabled by default.
-                                Multiprocessing doesn't work in Windows.
-  --method [basic|rtree]        The method to match groundtruth and predicted
-                                polygons (objectwise score)
-  --iou FLOAT                   Intersection-over-union threshold (default:
-                                0.5)
-  -v                            Enables verbose output
-  --help                        Show this message and exit.
-```
-
-## Test
+## Test calculation functions
 
 In command line from this directory:
 ```bash
-python -m unittest tests/test_f1_score.py
+python -m unittest tests/test_f1_calc.py
 ```
-
-## Known bugs and limitations
-
-Multiprocessing isn't supported on Windows.

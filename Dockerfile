@@ -7,7 +7,6 @@ RUN pip install flask
 ## App
 
 ADD . /f1
-
 WORKDIR /f1
 
 CMD ["python3","-u","app.py"]

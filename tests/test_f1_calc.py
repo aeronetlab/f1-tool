@@ -7,7 +7,7 @@ import unittest as unittest
 import geojson
 from PIL import Image
 
-from f1_utility import objectwise_f1_score, get_polygons, pixelwise_f1_score
+from f1_calc import objectwise_f1_score, get_polygons, pixelwise_f1_score, point_f1_score
 
 
 class TestF1Score(unittest.TestCase):
@@ -34,13 +34,13 @@ class TestF1Score(unittest.TestCase):
         pred_polygons = get_polygons(pred)
         t = time()
         self.assertAlmostEqual(
-            objectwise_f1_score(gt_polygons, pred_polygons, method='rtree', v=True, echo=print),
+            objectwise_f1_score(gt_polygons, pred_polygons, v=True, iou=0.5),
             0.79,
             places=2
         )
         print(time() - t)
 
-    def test_objectwise_f1_score_basic(self):
+    def test_point_f1_score(self):
         with open('tests/data/ventura/ventura_class_801.geojson') as src:
             gt = geojson.load(src)
         with open('tests/data/ventura/ventura_class_801_pred.geojson') as src:
@@ -48,10 +48,12 @@ class TestF1Score(unittest.TestCase):
 
         gt_polygons = get_polygons(gt)
         pred_polygons = get_polygons(pred)
+        pred_points = [poly.centroid for poly in pred_polygons]
+
         t = time()
         self.assertAlmostEqual(
-            objectwise_f1_score(gt_polygons, pred_polygons, method='basic', v=True, echo=print),
-            0.79,
+            point_f1_score(gt_polygons, pred_points, v=True),
+            0.87,
             places=2
         )
         print(time() - t)
