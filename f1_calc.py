@@ -1,15 +1,13 @@
-import rasterio
-
-from shapely.geometry import Polygon, asShape, MultiPolygon, Point
-from shapely.wkb import dumps, loads
 import rtree
+import numpy as np
 
-from sklearn.metrics import confusion_matrix, f1_score
-from typing import List, Callable
+from shapely.geometry import Polygon, MultiPolygon, Point
+from shapely.wkb import dumps, loads
+
+from sklearn.metrics import f1_score
+from typing import List
 from multiprocessing import Pool
 
-import geojson
-import numpy as np
 
 IOU_THRESHOLD = 0.5
 
@@ -111,23 +109,6 @@ def point_f1_score(gt: List[Polygon],
 
     return (2*tp / (2*tp + fp + fn)), log
 
-def _has_match_basic(polygon_serialized):
-    global IOU_THRESHOLD
-    global global_groundtruth_polygons
-    polygon = loads(polygon_serialized)
-    best_iou = 0
-    for label in global_groundtruth_polygons:
-        metric = iou(polygon, label)
-        if metric > best_iou:
-            best_iou = metric
-        if best_iou > IOU_THRESHOLD:
-            break
-
-    if best_iou > IOU_THRESHOLD:
-        return True
-    else:
-        return False
-
 
 def _has_match_rtree(polygon_serialized):
     global IOU_THRESHOLD
@@ -150,7 +131,6 @@ def _has_match_rtree(polygon_serialized):
         return True
     else:
         return False
-
 
 def iou(polygon1: Polygon, polygon2: Polygon):
     # buffer(0) may be used to “tidy” a polygon

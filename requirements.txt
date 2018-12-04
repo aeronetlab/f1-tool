@@ -1,8 +1,8 @@
-sklearn
-scipy
+scikit-learn
 shapely
-Pillow
-click
 numpy
 geojson
-Rtree
+rtree
+zipfile
+flask
+rasterio
