@@ -1,5 +1,6 @@
 import rtree
 import geojson
+import rasterio
 import numpy as np
 
 from shapely.geometry import MultiPolygon, Point
@@ -31,6 +32,23 @@ def pixelwise_f1_score(groundtruth_array, predicted_array, v: bool=False):
     if v:
         log = 'True Positive = ' + str(tp) + ', False Negative = ' + str(fn) + ', False Positive = ' + str(fp) + '\n'
     return f1, log
+
+
+def pixelwise_file_score(gt_file, pred_file, v: bool=False):
+    log = ''
+    with rasterio.open(gt_file) as src:
+        gt_img = src.read(1)
+        if v:
+            log += "Read groundtruth image, size = " + str(gt_img.shape) + "\n"
+    with rasterio.open(pred_file) as src:
+        # reading into the pre-allocated array guarantees equal sizes
+        pred_img = np.empty(gt_img.shape, dtype=src.dtypes[0])
+        src.read(1, out=pred_img)
+        if v:
+            log += "Read predicted image, size = " + str(src.width) + ', ' + str(src.height) \
+                   + ', reshaped to size of GT image \n'
+    score, score_log = pixelwise_f1_score(gt_img, pred_img, v)
+    return score, log + score_log
 
 
 def objectwise_f1_score(groundtruth_polygons: List[Polygon],
@@ -127,6 +145,49 @@ def point_f1_score(gt: List[Polygon],
 
     return f1, log
 
+
+def vector_file_score(gt_file, pred_file, area, format, v: bool=True, iou=0.5):
+
+    log = ''
+    try:
+        gt = geojson.load(gt_file)
+        gt_polygons = get_polygons(gt)
+        if v:
+            log += "Read groundtruth geojson, contains " + str(len(gt_polygons)) + " polygons \n"
+    except Exception as e:
+        raise Exception(log + 'Failed to read geojson groundtruth file\n' + str(e))
+
+    try:
+        pred = geojson.load(pred_file)
+        pred_polygons = get_polygons(pred)
+        if v:
+            log += "Read predicted geojson, contains " + str(len(pred_polygons)) + " polygons \n"
+    except Exception as e:
+        raise Exception(log + 'Failed to read geojson prediction file\n' + str(e))
+
+    if area:
+        try:
+            gt_polygons = cut_by_area(gt_polygons, area)
+            pred_polygons = cut_by_area(pred_polygons, area)
+        except Exception as e:
+            log += "Intersection cannot be calculated, ignoring area \n" \
+                   + str(e) + '\n'
+
+        log += "Cut vector data by specified area:\n" + \
+               str(len(gt_polygons)) + " groundtruth and " + \
+               str(len(pred_polygons)) + " predicted polygons inside\n"
+
+    try:
+        if format == 'vector':
+            score, score_log = objectwise_f1_score(gt_polygons, pred_polygons, iou=iou, v=v)
+        else:  # point
+            pred_points = [poly.centroid for poly in pred_polygons]
+            score, score_log = point_f1_score(gt_polygons, pred_points, v)
+
+    except Exception as e:
+        raise Exception(log + 'Error while calculating objectwise f1-score in ' + format + ' format\n' + str(e))
+
+    return score, log + score_log
 
 def _has_match_rtree(polygon_serialized):
     global IOU_THRESHOLD
