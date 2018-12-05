@@ -8,7 +8,7 @@ import numpy as np
 from flask import Flask, jsonify
 from zipfile import ZipFile
 
-from f1_calc import objectwise_f1_score, pixelwise_f1_score, point_f1_score, get_polygons
+from f1_calc import pixelwise_file_score, vector_file_score, get_polygons, get_area
 
 app = Flask(__name__)
 INTERNAL_DIR = '/data'
@@ -34,129 +34,92 @@ def heartbeat():
 @app.route("/f1", methods=["POST"])
 def evaluate():
 
-    # task={'format':'raster|vector|point', 'iou':'0.5', 'timestamp':yyyymmddhhmmss}
+    # task={'iou':'0.5'}
+    # files={}
 
-    format = flask.request.args.get('format')
-    timestamp = flask.request.args.get('timestamp')
-    iou = float(flask.request.args.get('iou'))
-    v = flask.request.args.get('v')
-
-    # zip file must contain files named gt.[tif|geojson] and pred.[tif|geojson]
-    zip = flask.request.files['file']
-    tmp_dir = os.path.join(INTERNAL_DIR, timestamp)
-    try:
-        gt_path, pred_path, area_path = extract_files(zip, format, tmp_dir)
-    except Exception as e:
-        clean_tmp(tmp_dir)
-        return jsonify({'score': 0.0, 'log': str(e)}), 400
     log = ''
+    try:
+        format, v, gt_file, pred_file, log_, area, bbox, iou = parse_request(flask.request)
+    except Exception as e:
+        return jsonify({'score': 0.0,
+                        'log': log + 'Invalid request:\n' + str(e)}), \
+               400
+    '''
+    if (gt_file.filename[-4:].lower() == '.tif' or gt_file.filename[-5:].lower() == '.tiff') and \
+        (pred_file.filename[-4:].lower() == '.tif' or pred_file.filename[-5:].lower() == '.tiff'):
+        format = 'raster'
+    elif gt_file.filename[-8:].lower() == '.geojson' and pred_file.filename[-8:].lower() == '.geojson':
+        format = 'vector'
+    else:
+        return jsonify({'score': 0.0,
+                        'log': 'Invalid request. gt and pred files must be both tiff or both geojson'}), \
+               400
+    '''
+
     if format == 'raster':
         try:
-            with rasterio.open(gt_path) as src:
-                gt_img = src.read(1)
-                if v:
-                    log += "Read groundtruth image, size = " + str(gt_img.shape) + "\n"
-            with rasterio.open(pred_path) as src:
-                # reading into the pre-allocated array guarantees equal sizes
-                pred_img = np.empty(gt_img.shape, dtype=src.dtypes[0])
-                src.read(1, out=pred_img)
-                if v:
-                    log += "Read predicted image, size = " + str(src.width) + ', ' + str(src.height)\
-                           + ', reshaped to size of GT image \n'
-            score, score_log = pixelwise_f1_score(gt_img, pred_img, v)
+            score, score_log = pixelwise_file_score(gt_file, pred_file, v)
         except Exception as e:
-            clean_tmp(tmp_dir)
-            return jsonify({'score': 0.0, 'log': str(e)}), 500
+            return jsonify({'score': 0.0, 'log': log + str(e)}), 500
 
-    elif format == 'vector':
+    elif format in ['vector', 'point']:
         try:
-            with open(gt_path) as src:
-                gt = geojson.load(src)
-            with open(pred_path) as src:
-                pred = geojson.load(src)
-
-            gt_polygons = get_polygons(gt)
-            if v:
-                log += "Read groundtruth geojson, contains " + str(len(gt_polygons)) + " polygons \n"
-            pred_polygons = get_polygons(pred)
-            if v:
-                log += "Read predicted geojson, contains " + str(len(pred_polygons)) + " polygons \n"
-            score, score_log = objectwise_f1_score(gt_polygons, pred_polygons, iou=iou, v=v)
+            score, score_log = vector_file_score(gt_file, pred_file, area, format, v, iou=iou)
         except Exception as e:
-            clean_tmp(tmp_dir)
-            return jsonify({'score': 0.0, 'log': str(e)}), 500
-
-    elif format == 'point':
-        try:
-            with open(gt_path) as src:
-                gt = geojson.load(src)
-            with open(pred_path) as src:
-                pred = geojson.load(src)
-
-            gt_polygons = get_polygons(gt)
-            if v:
-                log += "Read groundtruth geojson, contains " + str(len(gt_polygons)) + " polygons \n"
-            pred_polygons = get_polygons(pred)
-            if v:
-                log += "Read predicted geojson, contains " + str(len(pred_polygons)) + " polygons \n"
-            pred_points = [poly.centroid for poly in pred_polygons]
-            if v:
-                log += "Extracted points as centrods of the predicted polygons \n"
-            score, score_log = point_f1_score(gt_polygons, pred_points, v)
-        except Exception as e:
-            clean_tmp(tmp_dir)
-            return jsonify({'score': 0.0, 'log': str(e)}), 500
+            return jsonify({'score': 0.0, 'log': log + str(e)}), 500
 
     else:
-        clean_tmp(tmp_dir)
         return jsonify({'score': 0.0, 'log': 'Invalid format. Expected: raster/vector/point'}), 400
 
     log += score_log
-    clean_tmp(tmp_dir)
     if v:
         return jsonify({'score': score, 'log': log})
     else:
         return jsonify({'score': score})
     # return the data dictionary as a JSON response
 
-def clean_tmp(dir):
-    if not os.path.exists(dir):
-        return
-    for file in os.listdir(dir):
-        os.remove(os.path.join(dir, file))
-    os.rmdir(dir)
+def parse_request(request):
 
+    log = ''
 
-def extract_files(zip, format, dir):
-    """
-    Parses the data from an inference request
-    """
-    zf = ZipFile(zip)
-    names = zf.namelist()
-    if len(names) < 2 or len(names) > 3:
-        raise ValueError('There must be 2 or 3 files in archive')
+    format = request.args.get('format')
+    try:
+        iou = float(request.args.get('iou'))
+    except Exception as e:
+        raise Exception("Invalid request: iou is expected to be valid float\n" + str(e))
 
-    if 'area.geojson' not in names:
-        area_name = None
-    else:
-        area_name = os.path.join(dir, 'area.geojson')
+    v = request.args.get('v') in ['True', 'true', 'yes', 'Yes', 'y', 'Y']
 
-    if format == 'raster':
-        if 'gt.tif' not in names or 'pred.tif' not in names:
-            raise ValueError('There must be gt.tif and pred.tif files in archive')
-        gt_name = 'gt.tif'
-        pred_name = 'pred.tif'
+    # area is preferred over bbox, so if both are specified, area overrides bbox
+    area = None
+    bbox = None
+    if request.args.get('bbox'):
+        try:
+            bbox = [float(s) for s in request.args.get('bbox').split(',')]
+            assert len(bbox) == 4, "Length of bbox must be 4"
+            area = get_area(bbox)
+        except Exception as e:
+            log += "Specified bbox is invalid, ignoring it \n"\
+                   "Correct format is \'min_lon, min_lat, max_lon, max_lat\' \n" \
+                   + str(e) + '\n'
 
-    else: # vector or point
-        if 'gt.geojson' not in names or 'pred.geojson' not in names:
-            raise ValueError('There must be gt.geojson and pred.geojson files in archive')
-        gt_name = 'gt.geojson'
-        pred_name = 'pred.geojson'
+    if 'area' in request.files.keys():
+        area_file = request.files['area']
+        try:
+            area_gj = geojson.load(area_file)
+            area = get_polygons(area_gj)
+        except Exception as e:
+            log += "Specified area is invalid, ignoring it \n" \
+                   "Correct format is \'min_lon, min_lat, max_lon, max_lat\'" \
+                   + str(e) + '\n'
 
-    zf.extractall(path=dir)
+    if 'gt' not in request.files.keys() or 'pred' not in request.files.keys():
+        raise Exception('Invalid request. Expected: gt and pred files')
 
-    return os.path.join(dir, gt_name), os.path.join(dir, pred_name), area_name
+    gt_file = request.files['gt']
+    pred_file = request.files['pred']
 
+    return format, v, gt_file, pred_file, log, area, bbox, iou
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=debug)
