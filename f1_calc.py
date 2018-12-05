@@ -191,3 +191,8 @@ def get_polygons(json) -> List[Polygon]:
         else:
             raise Exception("Unexpected FeatureType:\n" + f.geometry['type'] + "\nExpected Polygon or MultiPolygon")
     return res
+
+def get_area(bbox: List[float]) -> List[Polygon]:
+    poly = Polygon([(bbox[0], bbox[3]), (bbox[0], bbox[1]), (bbox[2], bbox[1]), (bbox[2], bbox[3]), (bbox[0], bbox[3])])
+    assert poly.is_valid, "Bounding box polygon " + str(poly) +" is invalid \n"
+    return [poly]

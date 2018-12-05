@@ -8,7 +8,7 @@ import numpy as np
 from flask import Flask, jsonify
 from zipfile import ZipFile
 
-from f1_calc import objectwise_f1_score, pixelwise_f1_score, point_f1_score, get_polygons
+from f1_calc import objectwise_f1_score, pixelwise_f1_score, point_f1_score, get_polygons, get_area
 
 app = Flask(__name__)
 INTERNAL_DIR = '/data'
@@ -36,6 +36,7 @@ def evaluate():
 
     # task={'iou':'0.5'}
     # files={}
+    log = ''
 
     try:
         iou = float(flask.request.args.get('iou'))
@@ -45,7 +46,29 @@ def evaluate():
                400
     v = flask.request.args.get('v') in ['True', 'true', 'yes', 'Yes', 'y', 'Y']
 
-    # zip file must contain files named gt.[tif|geojson] and pred.[tif|geojson]
+    # area is preferred over bbox, so if both are specified, area overrides bbox
+    area = None
+    if flask.request.args.get('bbox'):
+        try:
+            bbox = [float(s) for s in flask.request.args.get('bbox').split(',')]
+            assert len(bbox) == 4, "Length of bbox must be 4"
+            area = get_area(bbox)
+        except Exception as e:
+            log += "Specified bbox is invalid, proceed to calculation without it \n"\
+                   "Correct format is \'min_lon, min_lat, max_lon, max_lat\' \n" \
+                   + str(e) + '\n'
+
+    if 'area' in flask.request.files.keys():
+        area_file = flask.request.files['area']
+        try:
+            area_gj = geojson.load(area_file)
+            area = get_polygons(area_gj)
+        except Exception as e:
+            log += "Specified area is invalid, proceed to calculation without it \n" \
+                   "Correct format is \'min_lon, min_lat, max_lon, max_lat\'" \
+                   + str(e) + '\n'
+
+
     if 'gt' not in flask.request.files.keys() or 'pred' not in flask.request.files.keys():
         return jsonify({'score': 0.0, 'log': 'Invalid request. Expected: gt and pred files'}), 400
 
@@ -62,12 +85,6 @@ def evaluate():
                         'log': 'Invalid request. gt and pred files must be both tiff or both geojson'}), \
                400
 
-    if 'area' in flask.request.files.keys():
-        area_file = flask.request.files['area']
-    else:
-        area_file = None
-
-    log = ''
     if format == 'raster':
         try:
             with rasterio.open(gt_file) as src:
@@ -104,16 +121,6 @@ def evaluate():
             return jsonify({'score': 0.0,
                             'log': log + 'Failed to read geojson prediction file\n' + str(e)}), \
                    400
-        if area_file:
-            try:
-                area = geojson.load(area_file)
-                area = get_polygons(area)
-            except Exception as e:
-                return jsonify({'score': 0.0,
-                                'log': log + 'Failed to read area file\n' + str(e)}), \
-                        400
-        else:
-            area = None
         try:
             score, score_log = objectwise_f1_score(gt_polygons, pred_polygons, iou=iou, v=v, area=area)
         except Exception as e:
