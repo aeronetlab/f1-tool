@@ -24,16 +24,21 @@ def pixelwise_f1_score(groundtruth_array, predicted_array, v: bool=False):
     tp = np.logical_and(groundtruth_array, predicted_array).sum()
     fn = int(groundtruth_array.sum() - tp)
     fp = int(predicted_array.sum() - tp)
+    if tp == 0:
+        f1 = 0
+    else:
+        f1 = (2 * tp / (2 * tp + fn + fp))
     if v:
         log = 'True Positive = ' + str(tp) + ', False Negative = ' + str(fn) + ', False Positive = ' + str(fp) + '\n'
-    return (2*tp/(2*tp + fn + fp)), log
+    return f1, log
 
 
 def objectwise_f1_score(groundtruth_polygons: List[Polygon],
                         predicted_polygons: List[Polygon],
                         iou=0.5,
                         v: bool=True,
-                        multiproc: bool=True):
+                        multiproc: bool=True,
+                        area=None):
     """
     Measures objectwise f1-score for two sets of polygons.
     The algorithm description can be found on
@@ -60,27 +65,37 @@ def objectwise_f1_score(groundtruth_polygons: List[Polygon],
     global global_groundtruth_rtree_index
     global_groundtruth_rtree_index = rtree.index.Index()
 
+    if area:
+        area = MultiPolygon(area)
+        groundtruth_polygons = [poly for poly in groundtruth_polygons if poly.intersects(area)]
+        predicted_polygons = [poly for poly in predicted_polygons if poly.intersects(area)]
+        log += "Cut vector data by specified area:\n" +\
+               str(len(groundtruth_polygons)) + " groundtruth and " +\
+               str(len(predicted_polygons)) + " predicted polygons inside\n"
     # for some reason builtin pickling doesn't work
     for i, polygon in enumerate(groundtruth_polygons):
         global_groundtruth_rtree_index.insert(
             i, polygon.bounds, dumps(polygon)
         )
-
     if multiproc:
         tp = sum(Pool().map(_has_match_rtree, (dumps(polygon) for polygon in predicted_polygons)))
     else:
         tp = sum(map(_has_match_rtree, (dumps(polygon) for polygon in predicted_polygons)))
 
-    # to avoid zero-division
-    if tp == 0:
-        return 0.
     fp = len(predicted_polygons) - tp
     fn = len(groundtruth_polygons) - tp
-    precision = tp / (tp + fp)
-    recall = tp / (tp + fn)
+    # to avoid zero-division
+    if tp == 0:
+        f1 = 0.
+    else:
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
+        f1 = 2 * (precision * recall) / (precision + recall)
     if v:
-        log = 'True Positive = ' + str(tp) + ', False Negative = ' + str(fn) + ', False Positive = ' + str(fp) + '\n'
-    return 2 * (precision * recall) / (precision + recall), log
+        log += 'True Positive = ' + str(tp) + ', False Negative = ' + str(fn) + ', False Positive = ' + str(fp) + '\n'
+
+    return f1, log
+
 
 def point_f1_score(gt: List[Polygon],
                    pred: List[Point],
@@ -94,6 +109,7 @@ def point_f1_score(gt: List[Polygon],
     polygons or lines etc.
     :param gt: groundtruth as list of polygons or a multipolygon
     :param pred: prediction as a list of points = centorids of predicted objects
+    :param v: bool - verbose output
     :return: F1-score
     """
     log = ''
@@ -108,10 +124,16 @@ def point_f1_score(gt: List[Polygon],
         else:
             fp += 1
     fn = len(gt) - tp
+    if tp == 0:
+        f1 = 0.
+    else:
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
+        f1 = 2 * (precision * recall) / (precision + recall)
     if v:
         log = 'True Positive = ' + str(tp) + ', False Negative = ' + str(fn) + ', False Positive = ' + str(fp) + '\n'
 
-    return (2*tp / (2*tp + fp + fn)), log
+    return f1, log
 
 
 def _has_match_rtree(polygon_serialized):

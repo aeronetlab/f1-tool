@@ -34,29 +34,47 @@ def heartbeat():
 @app.route("/f1", methods=["POST"])
 def evaluate():
 
-    # task={'format':'raster|vector|point', 'iou':'0.5', 'timestamp':yyyymmddhhmmss}
+    # task={'iou':'0.5'}
+    # files={}
 
-    format = flask.request.args.get('format')
-    timestamp = flask.request.args.get('timestamp')
-    iou = float(flask.request.args.get('iou'))
-    v = flask.request.args.get('v')
+    try:
+        iou = float(flask.request.args.get('iou'))
+    except Exception as e:
+        return jsonify({'score': 0.0,
+                        'log': "Invalid request: iou is expected to be valid float\n" + str(e)}), \
+               400
+    v = flask.request.args.get('v') in ['True', 'true', 'yes', 'Yes', 'y', 'Y']
 
     # zip file must contain files named gt.[tif|geojson] and pred.[tif|geojson]
-    zip = flask.request.files['file']
-    tmp_dir = os.path.join(INTERNAL_DIR, timestamp)
-    try:
-        gt_path, pred_path, area_path = extract_files(zip, format, tmp_dir)
-    except Exception as e:
-        clean_tmp(tmp_dir)
-        return jsonify({'score': 0.0, 'log': str(e)}), 400
+    if 'gt' not in flask.request.files.keys() or 'pred' not in flask.request.files.keys():
+        return jsonify({'score': 0.0, 'log': 'Invalid request. Expected: gt and pred files'}), 400
+
+    gt_file = flask.request.files['gt']
+    pred_file = flask.request.files['pred']
+
+    if (gt_file.filename[-4:].lower() == '.tif' or gt_file.filename[-5:].lower() == '.tiff') and \
+        (pred_file.filename[-4:].lower() == '.tif' or pred_file.filename[-5:].lower() == '.tiff'):
+        format = 'raster'
+    elif gt_file.filename[-8:].lower() == '.geojson' and pred_file.filename[-8:].lower() == '.geojson':
+        format = 'vector'
+    else:
+        return jsonify({'score': 0.0,
+                        'log': 'Invalid request. gt and pred files must be both tiff or both geojson'}), \
+               400
+
+    if 'area' in flask.request.files.keys():
+        area_file = flask.request.files['area']
+    else:
+        area_file = None
+
     log = ''
     if format == 'raster':
         try:
-            with rasterio.open(gt_path) as src:
+            with rasterio.open(gt_file) as src:
                 gt_img = src.read(1)
                 if v:
                     log += "Read groundtruth image, size = " + str(gt_img.shape) + "\n"
-            with rasterio.open(pred_path) as src:
+            with rasterio.open(pred_file) as src:
                 # reading into the pre-allocated array guarantees equal sizes
                 pred_img = np.empty(gt_img.shape, dtype=src.dtypes[0])
                 src.read(1, out=pred_img)
@@ -65,33 +83,49 @@ def evaluate():
                            + ', reshaped to size of GT image \n'
             score, score_log = pixelwise_f1_score(gt_img, pred_img, v)
         except Exception as e:
-            clean_tmp(tmp_dir)
-            return jsonify({'score': 0.0, 'log': str(e)}), 500
+            return jsonify({'score': 0.0, 'log': log + str(e)}), 500
 
     elif format == 'vector':
         try:
-            with open(gt_path) as src:
-                gt = geojson.load(src)
-            with open(pred_path) as src:
-                pred = geojson.load(src)
-
+            gt = geojson.load(gt_file)
             gt_polygons = get_polygons(gt)
             if v:
                 log += "Read groundtruth geojson, contains " + str(len(gt_polygons)) + " polygons \n"
+        except Exception as e:
+            return jsonify({'score': 0.0,
+                            'log': log + 'Failed to read geojson prediction file\n' + str(e)}), \
+                   400
+        try:
+            pred = geojson.load(pred_file)
             pred_polygons = get_polygons(pred)
             if v:
                 log += "Read predicted geojson, contains " + str(len(pred_polygons)) + " polygons \n"
-            score, score_log = objectwise_f1_score(gt_polygons, pred_polygons, iou=iou, v=v)
         except Exception as e:
-            clean_tmp(tmp_dir)
-            return jsonify({'score': 0.0, 'log': str(e)}), 500
+            return jsonify({'score': 0.0,
+                            'log': log + 'Failed to read geojson prediction file\n' + str(e)}), \
+                   400
+        if area_file:
+            try:
+                area = geojson.load(area_file)
+                area = get_polygons(area)
+            except Exception as e:
+                return jsonify({'score': 0.0,
+                                'log': log + 'Failed to read area file\n' + str(e)}), \
+                        400
+        else:
+            area = None
+        try:
+            score, score_log = objectwise_f1_score(gt_polygons, pred_polygons, iou=iou, v=v, area=area)
+        except Exception as e:
+            return jsonify({'score': 0.0,
+                            'log': log + 'Error while calculating objectwise f1-score\n' + str(e)}), \
+                   500
+
 
     elif format == 'point':
         try:
-            with open(gt_path) as src:
-                gt = geojson.load(src)
-            with open(pred_path) as src:
-                pred = geojson.load(src)
+            gt = geojson.load(gt_file)
+            pred = geojson.load(pred_file)
 
             gt_polygons = get_polygons(gt)
             if v:
@@ -104,28 +138,17 @@ def evaluate():
                 log += "Extracted points as centrods of the predicted polygons \n"
             score, score_log = point_f1_score(gt_polygons, pred_points, v)
         except Exception as e:
-            clean_tmp(tmp_dir)
             return jsonify({'score': 0.0, 'log': str(e)}), 500
 
     else:
-        clean_tmp(tmp_dir)
         return jsonify({'score': 0.0, 'log': 'Invalid format. Expected: raster/vector/point'}), 400
 
     log += score_log
-    clean_tmp(tmp_dir)
     if v:
         return jsonify({'score': score, 'log': log})
     else:
         return jsonify({'score': score})
     # return the data dictionary as a JSON response
-
-def clean_tmp(dir):
-    if not os.path.exists(dir):
-        return
-    for file in os.listdir(dir):
-        os.remove(os.path.join(dir, file))
-    os.rmdir(dir)
-
 
 def extract_files(zip, format, dir):
     """
