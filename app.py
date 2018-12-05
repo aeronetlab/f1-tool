@@ -8,7 +8,7 @@ import numpy as np
 from flask import Flask, jsonify
 from zipfile import ZipFile
 
-from f1_calc import objectwise_f1_score, pixelwise_f1_score, point_f1_score, get_polygons, get_area
+from f1_calc import objectwise_f1_score, pixelwise_f1_score, point_f1_score, get_polygons, get_area, cut_by_area
 
 app = Flask(__name__)
 INTERNAL_DIR = '/data'
@@ -37,7 +37,7 @@ def evaluate():
     # task={'iou':'0.5'}
     # files={}
     log = ''
-
+    format = flask.request.args.get('format')
     try:
         iou = float(flask.request.args.get('iou'))
     except Exception as e:
@@ -54,7 +54,7 @@ def evaluate():
             assert len(bbox) == 4, "Length of bbox must be 4"
             area = get_area(bbox)
         except Exception as e:
-            log += "Specified bbox is invalid, proceed to calculation without it \n"\
+            log += "Specified bbox is invalid, ignoring it \n"\
                    "Correct format is \'min_lon, min_lat, max_lon, max_lat\' \n" \
                    + str(e) + '\n'
 
@@ -64,10 +64,9 @@ def evaluate():
             area_gj = geojson.load(area_file)
             area = get_polygons(area_gj)
         except Exception as e:
-            log += "Specified area is invalid, proceed to calculation without it \n" \
+            log += "Specified area is invalid, ignoring it \n" \
                    "Correct format is \'min_lon, min_lat, max_lon, max_lat\'" \
                    + str(e) + '\n'
-
 
     if 'gt' not in flask.request.files.keys() or 'pred' not in flask.request.files.keys():
         return jsonify({'score': 0.0, 'log': 'Invalid request. Expected: gt and pred files'}), 400
@@ -75,6 +74,7 @@ def evaluate():
     gt_file = flask.request.files['gt']
     pred_file = flask.request.files['pred']
 
+    '''
     if (gt_file.filename[-4:].lower() == '.tif' or gt_file.filename[-5:].lower() == '.tiff') and \
         (pred_file.filename[-4:].lower() == '.tif' or pred_file.filename[-5:].lower() == '.tiff'):
         format = 'raster'
@@ -84,7 +84,8 @@ def evaluate():
         return jsonify({'score': 0.0,
                         'log': 'Invalid request. gt and pred files must be both tiff or both geojson'}), \
                400
-
+    '''
+    print (format)
     if format == 'raster':
         try:
             with rasterio.open(gt_file) as src:
@@ -102,7 +103,7 @@ def evaluate():
         except Exception as e:
             return jsonify({'score': 0.0, 'log': log + str(e)}), 500
 
-    elif format == 'vector':
+    elif format in ['vector', 'point']:
         try:
             gt = geojson.load(gt_file)
             gt_polygons = get_polygons(gt)
@@ -121,31 +122,31 @@ def evaluate():
             return jsonify({'score': 0.0,
                             'log': log + 'Failed to read geojson prediction file\n' + str(e)}), \
                    400
+        if area:
+            try:
+                gt_polygons = cut_by_area(gt_polygons, area)
+                pred_polygons = cut_by_area(pred_polygons, area)
+            except Exception as e:
+                log += "Intersection cannot be calculated, ignoring area \n" \
+                       + str(e) + '\n'
+
+            log += "Cut vector data by specified area:\n" + \
+                   str(len(gt_polygons)) + " groundtruth and " + \
+                   str(len(pred_polygons)) + " predicted polygons inside\n"
+
         try:
-            score, score_log = objectwise_f1_score(gt_polygons, pred_polygons, iou=iou, v=v, area=area)
+            if format == 'vector':
+                score, score_log = objectwise_f1_score(gt_polygons, pred_polygons, iou=iou, v=v)
+            else:  # point
+                pred_points = [poly.centroid for poly in pred_polygons]
+                score, score_log = point_f1_score(gt_polygons, pred_points, v)
+
         except Exception as e:
             return jsonify({'score': 0.0,
-                            'log': log + 'Error while calculating objectwise f1-score\n' + str(e)}), \
+                            'log': log
+                            + ' Error while calculating objectwise f1-score in ' + format + ' format\n'
+                            + str(e)}), \
                    500
-
-
-    elif format == 'point':
-        try:
-            gt = geojson.load(gt_file)
-            pred = geojson.load(pred_file)
-
-            gt_polygons = get_polygons(gt)
-            if v:
-                log += "Read groundtruth geojson, contains " + str(len(gt_polygons)) + " polygons \n"
-            pred_polygons = get_polygons(pred)
-            if v:
-                log += "Read predicted geojson, contains " + str(len(pred_polygons)) + " polygons \n"
-            pred_points = [poly.centroid for poly in pred_polygons]
-            if v:
-                log += "Extracted points as centrods of the predicted polygons \n"
-            score, score_log = point_f1_score(gt_polygons, pred_points, v)
-        except Exception as e:
-            return jsonify({'score': 0.0, 'log': str(e)}), 500
 
     else:
         return jsonify({'score': 0.0, 'log': 'Invalid format. Expected: raster/vector/point'}), 400

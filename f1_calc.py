@@ -37,8 +37,7 @@ def objectwise_f1_score(groundtruth_polygons: List[Polygon],
                         predicted_polygons: List[Polygon],
                         iou=0.5,
                         v: bool=True,
-                        multiproc: bool=True,
-                        area=None):
+                        multiproc: bool=True):
     """
     Measures objectwise f1-score for two sets of polygons.
     The algorithm description can be found on
@@ -65,13 +64,6 @@ def objectwise_f1_score(groundtruth_polygons: List[Polygon],
     global global_groundtruth_rtree_index
     global_groundtruth_rtree_index = rtree.index.Index()
 
-    if area:
-        area = MultiPolygon(area)
-        groundtruth_polygons = [poly for poly in groundtruth_polygons if poly.intersects(area)]
-        predicted_polygons = [poly for poly in predicted_polygons if poly.intersects(area)]
-        log += "Cut vector data by specified area:\n" +\
-               str(len(groundtruth_polygons)) + " groundtruth and " +\
-               str(len(predicted_polygons)) + " predicted polygons inside\n"
     # for some reason builtin pickling doesn't work
     for i, polygon in enumerate(groundtruth_polygons):
         global_groundtruth_rtree_index.insert(
@@ -196,3 +188,9 @@ def get_area(bbox: List[float]) -> List[Polygon]:
     poly = Polygon([(bbox[0], bbox[3]), (bbox[0], bbox[1]), (bbox[2], bbox[1]), (bbox[2], bbox[3]), (bbox[0], bbox[3])])
     assert poly.is_valid, "Bounding box polygon " + str(poly) +" is invalid \n"
     return [poly]
+
+def cut_by_area(polygons, area):
+    if area:
+        area = MultiPolygon(area)
+        polygons = [poly for poly in polygons if poly.intersects(area)]
+    return polygons
