@@ -229,20 +229,28 @@ def get_polygons(json) -> List[Polygon]:
     dst_crs = 'EPSG:4326'
     for f in json.features:
         if isinstance(f.geometry, geojson.MultiPolygon):
-            new_geom = transform_geom(src_crs=src_crs,
+            try:
+                new_geom = transform_geom(src_crs=src_crs,
                                       dst_crs=dst_crs,
                                       geom=f.geometry)
+            except ValueError:
+                # we ignore the invalid geometries
+                pass
             if new_geom['type'] == 'Polygon':
                 res += [asShape(new_geom)]
             else:
                 res += [asShape(geojson.Polygon(c)) for c in new_geom['coordinates']]
         elif isinstance(f.geometry, geojson.Polygon):
-            new_geom = transform_geom(src_crs=src_crs,
+            try:
+                new_geom = transform_geom(src_crs=src_crs,
                                       dst_crs=dst_crs,
                                       geom=f.geometry)
+            except ValueError:
+                # we ignore the invalid geometries
+                pass
             res += [asShape(new_geom)]
         else:
-            raise Exception("Unexpected FeatureType:\n" + f.geometry['type'] + "\nExpected Polygon or MultiPolygon")
+            pass # raise Exception("Unexpected FeatureType:\n" + f.geometry['type'] + "\nExpected Polygon or MultiPolygon")
     return res
 
 def get_area(bbox: List[float]) -> List[Polygon]:
