@@ -235,7 +235,7 @@ def get_polygons(json) -> List[Polygon]:
                                       geom=f.geometry)
             except ValueError:
                 # we ignore the invalid geometries
-                pass
+                continue
             if new_geom['type'] == 'Polygon':
                 res += [asShape(new_geom)]
             else:
@@ -247,7 +247,7 @@ def get_polygons(json) -> List[Polygon]:
                                       geom=f.geometry)
             except ValueError:
                 # we ignore the invalid geometries
-                pass
+                continue
             res += [asShape(new_geom)]
         else:
             pass # raise Exception("Unexpected FeatureType:\n" + f.geometry['type'] + "\nExpected Polygon or MultiPolygon")
