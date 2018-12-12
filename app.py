@@ -83,11 +83,17 @@ def parse_request(request):
     log = ''
 
     format = request.args.get('format')
-    try:
-        iou = float(request.args.get('iou'))
-    except Exception as e:
-        raise Exception("Invalid request: iou is expected to be valid float\n" + str(e))
 
+    if format == 'vector':
+        try:
+            iou = float(request.args.get('iou'))
+            assert iou < 1.0 and iou > 0.0
+        except Exception as e:
+            log += "Iou is not specified correctly, using default value 0.5\n"
+            iou = 0.5
+            #raise Exception("Invalid request: iou is expected to be valid float\n" + str(e))
+    else:
+        iou = None
     v = request.args.get('v') in ['True', 'true', 'yes', 'Yes', 'y', 'Y']
 
     # area is preferred over bbox, so if both are specified, area overrides bbox
