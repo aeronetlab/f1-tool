@@ -2,7 +2,7 @@ FROM aeronetlab/prod:1.2-cpu
 
 ## Additional packages etc.
 
-RUN pip install flask
+RUN pip install -r requirements.txt
 
 ## App
 
