@@ -6,11 +6,13 @@ import rasterio
 
 import numpy as np
 from flask import Flask, jsonify
+from flask_cors import CORS
 from zipfile import ZipFile
 
 from f1_calc import pixelwise_file_score, vector_file_score, get_polygons, get_area
 
 app = Flask(__name__)
+CORS(app)
 INTERNAL_DIR = '/data'
 debug = os.environ.get('ENVIRONMENT') != 'production'
 
