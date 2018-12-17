@@ -13,7 +13,7 @@ from shapely.geometry import Polygon, asShape
 
 IOU_THRESHOLD = 0.5
 global_groundtruth_rtree_index = rtree.index.Index()
-
+EPS = 0.00000001
 
 def pixelwise_f1_score(groundtruth_array, predicted_array, v: bool=False):
 
@@ -109,7 +109,8 @@ def objectwise_f1_score(groundtruth_polygons: List[Polygon],
 
 def point_f1_score(gt: List[Polygon],
                    pred: List[Point],
-                   v=False):
+                   v=False,
+                   multiproc=True):
     """
     Checks the f1 for object detection, true positive is when a detected point is inside a gt polygon
     It does not give precise result if several points are within one objects.
@@ -123,17 +124,24 @@ def point_f1_score(gt: List[Polygon],
     :return: F1-score
     """
     log = ''
-    if len(pred) == 0:
-        return 0
-    tp = 0
-    fp = 0
-    gt_fixed = MultiPolygon(gt).buffer(0)
-    for point in pred:
-        if gt_fixed.contains(point):
-            tp += 1
-        else:
-            fp += 1
+    global IOU_THRESHOLD
+    IOU_THRESHOLD = iou
+    global global_groundtruth_rtree_index
+    global_groundtruth_rtree_index = rtree.index.Index()
+
+    # for some reason builtin pickling doesn't work
+    for i, polygon in enumerate(gt):
+        global_groundtruth_rtree_index.insert(
+            i, polygon.bounds, dumps(polygon)
+        )
+    if multiproc:
+        tp = sum(Pool().map(_lies_within_rtree, (point for point in pred)))
+    else:
+        tp = sum(map(_lies_within_rtree, (point for point in pred)))
+
+    fp = len(pred) - tp
     fn = len(gt) - tp
+    # to avoid zero-division
     if tp == 0:
         f1 = 0.
     else:
@@ -141,7 +149,7 @@ def point_f1_score(gt: List[Polygon],
         recall = tp / (tp + fn)
         f1 = 2 * (precision * recall) / (precision + recall)
     if v:
-        log = 'True Positive = ' + str(tp) + ', False Negative = ' + str(fn) + ', False Positive = ' + str(fp) + '\n'
+        log += 'True Positive = ' + str(tp) + ', False Negative = ' + str(fn) + ', False Positive = ' + str(fp) + '\n'
 
     return f1, log
 
@@ -210,6 +218,23 @@ def _has_match_rtree(polygon_serialized):
         return True
     else:
         return False
+
+
+def _lies_within_rtree(point):
+
+    global IOU_THRESHOLD
+    global global_groundtruth_rtree_index
+    candidates = [
+        loads(candidate_serialized)
+        for candidate_serialized
+        in global_groundtruth_rtree_index.intersection(
+            (point.x, point.y), objects='raw'
+        )
+    ]
+    for candidate in candidates:
+        if candidate.contains(point):
+            return True
+    return False
 
 def iou(polygon1: Polygon, polygon2: Polygon):
     # buffer(0) may be used to “tidy” a polygon
