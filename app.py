@@ -41,6 +41,7 @@ def evaluate():
         return jsonify({'score': 0.0,
                         'log': log + 'Invalid request:\n' + str(e)}), \
                400
+    log += log_
     '''
     if (gt_file.filename[-4:].lower() == '.tif' or gt_file.filename[-5:].lower() == '.tiff') and \
         (pred_file.filename[-4:].lower() == '.tif' or pred_file.filename[-5:].lower() == '.tiff'):
@@ -80,11 +81,17 @@ def parse_request(request):
     log = ''
 
     format = request.args.get('format')
-    try:
-        iou = float(request.args.get('iou'))
-    except Exception as e:
-        raise Exception("Invalid request: iou is expected to be valid float\n" + str(e))
 
+    if format == 'vector':
+        try:
+            iou = float(request.args.get('iou'))
+            assert iou < 1.0 and iou > 0.0, "IoU must be from 0 to 1"
+        except Exception:
+            log += "Iou is not specified correctly, using default value 0.5\n"
+            iou = 0.5
+            #raise Exception("Invalid request: iou is expected to be valid float\n" + str(e))
+    else:
+        iou = None
     v = request.args.get('v') in ['True', 'true', 'yes', 'Yes', 'y', 'Y']
 
     # area is preferred over bbox, so if both are specified, area overrides bbox
@@ -107,7 +114,7 @@ def parse_request(request):
             area = get_polygons(area_gj)
         except Exception as e:
             log += "Specified area is invalid, ignoring it \n" \
-                   "Correct format is \'min_lon, min_lat, max_lon, max_lat\'" \
+                   "Correct format is geojson containining Polygons or MultiPolygon" \
                    + str(e) + '\n'
 
     if 'gt' not in request.files.keys() or 'pred' not in request.files.keys():
