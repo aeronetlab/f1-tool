@@ -2,11 +2,8 @@ import os
 import flask
 import logging
 import geojson
-import rasterio
 
-import numpy as np
 from flask import Flask, jsonify
-from zipfile import ZipFile
 
 from f1_calc import pixelwise_file_score, vector_file_score, get_polygons, get_area
 
