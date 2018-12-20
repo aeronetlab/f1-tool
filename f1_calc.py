@@ -11,8 +11,6 @@ from multiprocessing import Pool
 from rasterio.warp import transform_geom
 from shapely.geometry import Polygon, asShape
 
-IOU_THRESHOLD = 0.5
-global_groundtruth_rtree_index = rtree.index.Index()
 EPS = 0.00000001
 
 def pixelwise_f1_score(groundtruth_array, predicted_array, v: bool=False):
@@ -51,107 +49,18 @@ def pixelwise_file_score(gt_file, pred_file, v: bool=False):
     return score, log + score_log
 
 
-def objectwise_f1_score(groundtruth_polygons: List[Polygon],
-                        predicted_polygons: List[Polygon],
-                        iou=0.5,
-                        v: bool=True,
-                        multiproc: bool=True):
-    """
-    Measures objectwise f1-score for two sets of polygons.
-    The algorithm description can be found on
-    https://medium.com/the-downlinq/the-spacenet-metric-612183cc2ddb
-
-    It is implemented not perfectly fair as here we do not remove groundtruth polygpons from index
-    after the match is found. But if IoU threshold is higher than 0.5, and the features in prediction do not intersect,
-    there can be only one match, and we presume that it is so
-
-    :param groundtruth_polygons: list of shapely Polygons;
-    we suppose that these polygons are not intersected
-    :param predicted_polygons: list of shapely Polygons with
-    the same size as groundtruth_polygons;
-    we suppose that these polygons are not intersected
-    :param method: 'rtree' or 'basic'
-    :param v: is_verbose
-    :param echo: function for printing
-    :param multiproc: nables/disables multiprocessing
-    :return: float, f1-score
-    """
-    log = ''
-    global IOU_THRESHOLD
-    IOU_THRESHOLD = iou
-    global global_groundtruth_rtree_index
-    global_groundtruth_rtree_index = rtree.index.Index()
-
-    # for some reason builtin pickling doesn't work
-    for i, polygon in enumerate(groundtruth_polygons):
-        global_groundtruth_rtree_index.insert(
-            i, polygon.bounds, dumps(polygon)
-        )
-    if multiproc:
-        tp = sum(Pool().map(_has_match_rtree, (dumps(polygon) for polygon in predicted_polygons)))
-    else:
-        tp = sum(map(_has_match_rtree, (dumps(polygon) for polygon in predicted_polygons)))
-
-    fp = len(predicted_polygons) - tp
-    fn = len(groundtruth_polygons) - tp
-    # to avoid zero-division
-    if tp == 0:
-        f1 = 0.
-    else:
-        precision = tp / (tp + fp)
-        recall = tp / (tp + fn)
-        f1 = 2 * (precision * recall) / (precision + recall)
-    if v:
-        log += 'True Positive = ' + str(tp) + ', False Negative = ' + str(fn) + ', False Positive = ' + str(fp) + '\n'
-
-    return f1, log
-
-
-def point_f1_score(gt: List[Polygon],
-                   pred: List[Point],
-                   v=False):
-    """
-    Checks the f1 for object detection, true positive is when a detected point is inside a gt polygon
-    It does not give precise result if several points are within one objects.
-    In our case it is avoided by filtering of the prediction by size
-
-    Also now it does not check if all the predictions are points, and can give incorrect results if there are
-    polygons or lines etc.
-    :param gt: groundtruth as list of polygons or a multipolygon
-    :param pred: prediction as a list of points = centorids of predicted objects
-    :param v: bool - verbose output
-    :return: F1-score
-    """
-    log = ''
-    global IOU_THRESHOLD
-    IOU_THRESHOLD = iou
-    global global_groundtruth_rtree_index
-    global_groundtruth_rtree_index = rtree.index.Index()
-
-    # for some reason builtin pickling doesn't work
-    for i, polygon in enumerate(gt):
-        global_groundtruth_rtree_index.insert(
-            i, polygon.bounds, dumps(polygon)
-        )
-    tp = sum(map(_lies_within_rtree, (point for point in pred)))
-
-    fp = len(pred) - tp
-    fn = len(gt) - tp
-    # to avoid zero-division
-    if tp == 0:
-        f1 = 0.
-    else:
-        precision = tp / (tp + fp)
-        recall = tp / (tp + fn)
-        f1 = 2 * (precision * recall) / (precision + recall)
-    if v:
-        log += 'True Positive = ' + str(tp) + ', False Negative = ' + str(fn) + ', False Positive = ' + str(fp) + '\n'
-
-    return f1, log
-
 
 def vector_file_score(gt_file, pred_file, area, format, v: bool=True, iou=0.5):
-
+    '''
+    All the work with vector data, either in object or in point score
+    :param gt_file:
+    :param pred_file:
+    :param area:
+    :param format:
+    :param v:
+    :param iou:
+    :return:
+    '''
     log = ''
     try:
         gt = geojson.load(gt_file)
@@ -193,44 +102,144 @@ def vector_file_score(gt_file, pred_file, area, format, v: bool=True, iou=0.5):
 
     return score, log + score_log
 
-def _has_match_rtree(polygon_serialized):
+def objectwise_f1_score(gt: List[Polygon],
+                        pred: List[Polygon],
+                        iou=0.5,
+                        v: bool=True):
+    """
+    Measures objectwise f1-score for two sets of polygons.
+    The algorithm description can be found on
+    https://medium.com/the-downlinq/the-spacenet-metric-612183cc2ddb
+
+    It is implemented not perfectly fair as here we do not remove groundtruth polygpons from index
+    after the match is found. But if IoU threshold is higher than 0.5, and the features in prediction do not intersect,
+    there can be only one match, and we presume that it is so
+
+    :param groundtruth_polygons: list of shapely Polygons;
+    we suppose that these polygons are not intersected
+    :param predicted_polygons: list of shapely Polygons with
+    the same size as groundtruth_polygons;
+    we suppose that these polygons are not intersected
+    :param method: 'rtree' or 'basic'
+    :param v: is_verbose
+    :param echo: function for printing
+    :param multiproc: nables/disables multiprocessing
+    :return: float, f1-score
+    """
+    log = ''
     global IOU_THRESHOLD
-    global global_groundtruth_rtree_index
+    IOU_THRESHOLD = iou
+    groundtruth_rtree_index = rtree.index.Index()
+
+    # for some reason builtin pickling doesn't work
+    for i, polygon in enumerate(gt):
+        groundtruth_rtree_index.insert(
+            i, polygon.bounds, dumps(polygon)
+        )
+
+    tp = sum(map(_has_match_rtree,
+                 (dumps(polygon) for polygon in pred),
+                 [iou]*len(pred),
+                 [groundtruth_rtree_index]*len(pred)))
+
+    fp = len(pred) - tp
+    fn = len(gt) - tp
+    # to avoid zero-division
+    if tp == 0:
+        f1 = 0.
+    else:
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
+        f1 = 2 * (precision * recall) / (precision + recall)
+    if v:
+        log += 'True Positive = ' + str(tp) + ', False Negative = ' + str(fn) + ', False Positive = ' + str(fp) + '\n'
+
+    return f1, log
+
+
+def point_f1_score(gt: List[Polygon],
+                   pred: List[Point],
+                   v=False):
+    """
+    Checks the f1 for object detection, true positive is when a detected point is inside a gt polygon
+    It does not give precise result if several points are within one objects.
+    In our case it is avoided by filtering of the prediction by size
+
+    Also now it does not check if all the predictions are points, and can give incorrect results if there are
+    polygons or lines etc.
+    :param gt: groundtruth as list of polygons or a multipolygon
+    :param pred: prediction as a list of points = centorids of predicted objects
+    :param v: bool - verbose output
+    :return: F1-score
+    """
+    log = ''
+    global IOU_THRESHOLD
+    IOU_THRESHOLD = iou
+    groundtruth_rtree_index = rtree.index.Index()
+
+    # for some reason builtin pickling doesn't work
+    for i, polygon in enumerate(gt):
+        groundtruth_rtree_index.insert(
+            i, polygon.bounds, dumps(polygon)
+        )
+    tp = sum(map(_lies_within_rtree, (point for point in pred), [groundtruth_rtree_index]*len(pred)))
+
+    fp = len(pred) - tp
+    fn = len(gt) - tp
+    # to avoid zero-division
+    if tp == 0:
+        f1 = 0.
+    else:
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
+        f1 = 2 * (precision * recall) / (precision + recall)
+    if v:
+        log += 'True Positive = ' + str(tp) + ', False Negative = ' + str(fn) + ', False Positive = ' + str(fp) + '\n'
+
+    return f1, log
+
+
+def _has_match_rtree(polygon_serialized, iou_threshold, groundtruth_rtree_index):
+
     polygon = loads(polygon_serialized)
     best_iou = 0
-    candidates = [
-        loads(candidate_serialized)
-        for candidate_serialized
-        in global_groundtruth_rtree_index.intersection(
-            polygon.bounds, objects='raw'
+    best_item = None
+    candidate_items = [
+        candidate_item
+        for candidate_item
+        in groundtruth_rtree_index.intersection(
+            polygon.bounds, objects=True
         )
     ]
-    for candidate in candidates:
+
+    for item in candidate_items:
+        candidate = loads(item.get_object(loads))
         metric = iou(polygon, candidate)
         if metric > best_iou:
             best_iou = metric
+            best_item = item
 
-    if best_iou > IOU_THRESHOLD:
+    if best_iou > iou_threshold and best_item is not None:
+        groundtruth_rtree_index.delete(best_item.id,
+                                       best_item.bbox)
         return True
     else:
         return False
 
 
-def _lies_within_rtree(point):
+def _lies_within_rtree(point, groundtruth_rtree_index):
 
-    global IOU_THRESHOLD
-    global global_groundtruth_rtree_index
     candidate_items = [
         candidate_item
         for candidate_item
-        in global_groundtruth_rtree_index.intersection(
+        in groundtruth_rtree_index.intersection(
             (point.x, point.y), objects=True
         )
     ]
-    for candidate_item in candidate_items:
-        candidate = loads(candidate_item.get_object(loads))
+    for item in candidate_items:
+        candidate = loads(item.get_object(loads))
         if candidate.contains(point):
-            global_groundtruth_rtree_index.delete(candidate_item.id, candidate.bounds)
+            groundtruth_rtree_index.delete(item.id, candidate.bounds)
             return True
     return False
 
