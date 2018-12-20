@@ -109,8 +109,7 @@ def objectwise_f1_score(groundtruth_polygons: List[Polygon],
 
 def point_f1_score(gt: List[Polygon],
                    pred: List[Point],
-                   v=False,
-                   multiproc=True):
+                   v=False):
     """
     Checks the f1 for object detection, true positive is when a detected point is inside a gt polygon
     It does not give precise result if several points are within one objects.
@@ -134,10 +133,7 @@ def point_f1_score(gt: List[Polygon],
         global_groundtruth_rtree_index.insert(
             i, polygon.bounds, dumps(polygon)
         )
-    if multiproc:
-        tp = sum(Pool().map(_lies_within_rtree, (point for point in pred)))
-    else:
-        tp = sum(map(_lies_within_rtree, (point for point in pred)))
+    tp = sum(map(_lies_within_rtree, (point for point in pred)))
 
     fp = len(pred) - tp
     fn = len(gt) - tp
@@ -224,15 +220,17 @@ def _lies_within_rtree(point):
 
     global IOU_THRESHOLD
     global global_groundtruth_rtree_index
-    candidates = [
-        loads(candidate_serialized)
-        for candidate_serialized
+    candidate_items = [
+        candidate_item
+        for candidate_item
         in global_groundtruth_rtree_index.intersection(
-            (point.x, point.y), objects='raw'
+            (point.x, point.y), objects=True
         )
     ]
-    for candidate in candidates:
+    for candidate_item in candidate_items:
+        candidate = loads(candidate_item.get_object(loads))
         if candidate.contains(point):
+            global_groundtruth_rtree_index.delete(candidate_item.id, candidate.bounds)
             return True
     return False
 
