@@ -34,7 +34,7 @@ class TestF1Score(unittest.TestCase):
         pred_polygons = get_polygons(pred)
         t = time()
         self.assertAlmostEqual(
-            objectwise_f1_score(gt_polygons, pred_polygons, v=True, iou=0.5),
+            objectwise_f1_score(gt_polygons, pred_polygons, format='vector', v=True, iou=0.5),
             0.79,
             places=2
         )
@@ -62,7 +62,7 @@ class TestF1Score(unittest.TestCase):
         groundtruth_array = np.array(Image.open('tests/data/ventura/ventura_class_801.tif'))
         predicted_array = np.array(Image.open('tests/data/ventura/ventura_class_801_pred.tif'))
         self.assertAlmostEqual(
-            pixelwise_f1_score(groundtruth_array, predicted_array, v=True, echo=print),
+            pixelwise_f1_score(groundtruth_array, predicted_array, v=True),
             0.73,
             places=2
         )
