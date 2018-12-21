@@ -4,12 +4,20 @@ import logging
 import geojson
 import time
 from flask import Flask, jsonify
+from flask_cors import CORS
 
 from f1_calc import pixelwise_file_score, vector_file_score, get_geom, get_area
 
 app = Flask(__name__)
 INTERNAL_DIR = '/data'
 debug = os.environ.get('ENVIRONMENT') != 'production'
+
+# if env variable CORS_ALLOWED is presented, use it as list of cors
+use_cors = os.environ.get('CORS_ALLOWED')
+if use_cors:
+    origins = use_cors.split(',')
+    CORS(app, resources={r"/*": {origins: origins}})
+    print("Use cors: {}".format(use_cors))
 
 
 @app.before_first_request
@@ -36,11 +44,12 @@ def evaluate():
     start_time = time.time()
     log = ''
     try:
-        format, v, gt_file, pred_file, log_, area, bbox, iou = parse_request(flask.request)
+        format, v, gt_file, pred_file, log_, area, bbox, iou = parse_request(
+            flask.request)
     except Exception as e:
         return jsonify({'score': 0.0,
                         'log': log + 'Invalid request:\n' + str(e)}), \
-               400
+            400
     log += log_
     '''
     if (gt_file.filename[-4:].lower() == '.tif' or gt_file.filename[-5:].lower() == '.tiff') and \
@@ -62,7 +71,8 @@ def evaluate():
 
     elif format in ['vector', 'point']:
         try:
-            score, score_log = vector_file_score(gt_file, pred_file, area, format, v, iou=iou)
+            score, score_log = vector_file_score(
+                gt_file, pred_file, area, format, v, iou=iou)
         except Exception as e:
             return jsonify({'score': 0.0, 'log': log + str(e)}), 500
 
@@ -76,6 +86,7 @@ def evaluate():
     else:
         return jsonify({'score': score})
     # return the data dictionary as a JSON response
+
 
 def parse_request(request):
 
@@ -125,6 +136,7 @@ def parse_request(request):
     pred_file = request.files['pred']
 
     return format, v, gt_file, pred_file, log, area, bbox, iou
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=debug)
