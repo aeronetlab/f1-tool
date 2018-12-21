@@ -2,10 +2,10 @@ import os
 import flask
 import logging
 import geojson
-
+import time
 from flask import Flask, jsonify
 
-from f1_calc import pixelwise_file_score, vector_file_score, get_polygons, get_area
+from f1_calc import pixelwise_file_score, vector_file_score, get_geom, get_area
 
 app = Flask(__name__)
 INTERNAL_DIR = '/data'
@@ -33,7 +33,7 @@ def evaluate():
 
     # task={'iou':'0.5'}
     # files={}
-
+    start_time = time.time()
     log = ''
     try:
         format, v, gt_file, pred_file, log_, area, bbox, iou = parse_request(flask.request)
@@ -70,6 +70,7 @@ def evaluate():
         return jsonify({'score': 0.0, 'log': 'Invalid format. Expected: raster/vector/point'}), 400
 
     log += score_log
+    log += 'Execution time: ' + str(time.time() - start_time)
     if v:
         return jsonify({'score': score, 'log': log})
     else:
@@ -111,7 +112,7 @@ def parse_request(request):
         area_file = request.files['area']
         try:
             area_gj = geojson.load(area_file)
-            area = get_polygons(area_gj)
+            area = get_geom(area_gj, format='vector')
         except Exception as e:
             log += "Specified area is invalid, ignoring it \n" \
                    "Correct format is geojson containining Polygons or MultiPolygon" \
