@@ -16,7 +16,7 @@ debug = os.environ.get('ENVIRONMENT') != 'production'
 use_cors = os.environ.get('CORS_ALLOWED')
 if use_cors:
     origins = use_cors.split(',')
-    CORS(app, resources={r"/*": {origins: origins}})
+    CORS(app, origins=origins)
     print("Use cors: {}".format(use_cors))
 
 
@@ -48,8 +48,8 @@ def evaluate():
             flask.request)
     except Exception as e:
         return jsonify({'score': 0.0,
-                        'log': log + 'Invalid request:\n' + str(e)}), \
-            400
+                        'log': log + 'Invalid request:\n' + str(e)}),
+        400
     log += log_
     '''
     if (gt_file.filename[-4:].lower() == '.tif' or gt_file.filename[-5:].lower() == '.tiff') and \
@@ -101,7 +101,7 @@ def parse_request(request):
         except Exception:
             log += "Iou is not specified correctly, using default value 0.5\n"
             iou = 0.5
-            #raise Exception("Invalid request: iou is expected to be valid float\n" + str(e))
+            # raise Exception("Invalid request: iou is expected to be valid float\n" + str(e))
     else:
         iou = None
     v = request.args.get('v') in ['True', 'true', 'yes', 'Yes', 'y', 'Y']
