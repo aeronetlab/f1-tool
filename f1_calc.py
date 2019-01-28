@@ -3,18 +3,75 @@ import geojson
 import rasterio
 import numpy as np
 
-from shapely.geometry import MultiPolygon, Point
-from shapely.wkb import dumps, loads
-
 from typing import List
-from multiprocessing import Pool
+from shapely.wkb import dumps, loads
 from rasterio.warp import transform_geom
-from shapely.geometry import Polygon, asShape
+from rasterio import RasterioIOError
+from shapely.geometry import MultiPolygon, Point, Polygon, asShape
+
 
 EPS = 0.00000001
 
-def pixelwise_f1_score(groundtruth_array, predicted_array, v: bool=False):
 
+# ================= PIXELWISE F1 ================================
+
+def pixelwise_file_score(gt_file,
+                         pred_file,
+                         v: bool = False,
+                         filetype='tif'):
+    """
+
+    :param gt_file:
+    :param pred_file:
+    :param v:
+    :return:
+    """
+    log = ''
+    if filetype == 'geojson':
+        try:
+            pred = geojson.load(pred_file)
+            pred_polygons = get_geom(pred, 'vector')
+            if v:
+                log += "Read predicted geojson, contains " + str(len(pred_polygons)) + " objects \n"
+        except Exception as e:
+            raise Exception(log + 'Failed to read prediction file as geojson\n' + str(e))
+
+        try:
+            gt = geojson.load(gt_file)
+            # GT is always as polygons, not points
+            gt_polygons = get_geom(gt, 'vector')
+            if v:
+                log += "Read groundtruth geojson, contains " + str(len(gt_polygons)) + " polygons \n"
+        except Exception as e:
+            raise Exception(log + 'Failed to read groundtruth file as geojson\n' + str(e))
+        score, score_log = pixelwise_vector_f1(gt_polygons, pred_polygons, v)
+
+    else: # tif or any other (default) value
+        try:
+            with rasterio.open(gt_file) as src:
+                gt_img = src.read(1)
+                if v:
+                    log += "Read groundtruth image, size = " + str(gt_img.shape) + "\n"
+            with rasterio.open(pred_file) as src:
+                # reading into the pre-allocated array guarantees equal sizes
+                pred_img = np.empty(gt_img.shape, dtype=src.dtypes[0])
+                src.read(1, out=pred_img)
+                if v:
+                    log += "Read predicted image, size = " + str(src.width) + ', ' + str(src.height) \
+                           + ', reshaped to size of GT image \n'
+            score, score_log = pixelwise_raster_f1(gt_img, pred_img, v)
+        except Exception as e:
+            raise Exception(log + 'Failed to read input file as raster\n' + str(e))
+    return score, log + score_log
+
+def pixelwise_raster_f1(groundtruth_array, predicted_array, v: bool=False):
+    """
+    Calculates f1-score for 2 equal-sized arrays
+    :param groundtruth_array:
+    :param predicted_array:
+    :param v: is_verbose
+    :return:
+    """
     log = ''
     assert groundtruth_array.shape == predicted_array.shape, "Images has different sizes"
     groundtruth_array[groundtruth_array > 0] = 1
@@ -32,25 +89,46 @@ def pixelwise_f1_score(groundtruth_array, predicted_array, v: bool=False):
     return f1, log
 
 
-def pixelwise_file_score(gt_file, pred_file, v: bool=False):
+def pixelwise_vector_f1(gt: List[Polygon],
+                        pred: List[Polygon],
+                        v: bool=True):
+    """
+    Measures pixelwise f1-score, but for vector representation instead of raster.
+
+    :param gt: list of shapely Polygons, represents ground truth;
+    :param pred: list of shapely Polygons or Points (according to the 'format' param, represents prediction;
+    :param format: 'vector' or 'point', means format of prediction and corresponding variant of algorithm;
+    :param v: is_verbose
+    :return: float, f1-score and string, log
+    """
     log = ''
-    with rasterio.open(gt_file) as src:
-        gt_img = src.read(1)
-        if v:
-            log += "Read groundtruth image, size = " + str(gt_img.shape) + "\n"
-    with rasterio.open(pred_file) as src:
-        # reading into the pre-allocated array guarantees equal sizes
-        pred_img = np.empty(gt_img.shape, dtype=src.dtypes[0])
-        src.read(1, out=pred_img)
-        if v:
-            log += "Read predicted image, size = " + str(src.width) + ', ' + str(src.height) \
-                   + ', reshaped to size of GT image \n'
-    score, score_log = pixelwise_f1_score(gt_img, pred_img, v)
-    return score, log + score_log
+    gt_mp = MultiPolygon(gt)
+    pred_mp = MultiPolygon(pred)
+
+    # try making polygons valid
+    gt_mp = gt_mp.buffer(0)
+    pred_mp = pred_mp.buffer(0)
+
+    tp = gt_mp.intersection(pred_mp).area
+    fp = pred_mp.area - tp
+    fn = gt_mp.area - tp
+
+    if tp == 0:
+        f1 = 0.
+    else:
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
+        f1 = 2 * (precision * recall) / (precision + recall)
+    if v:
+        log += 'True Positive = ' + str(tp) + ', False Negative = ' + str(fn) + ', False Positive = ' + str(fp) + '\n'
+
+    return f1, log
 
 
+# ==================================== OBJECTWISE F1 ============================================
 
-def vector_file_score(gt_file, pred_file, area, format, v: bool=True, iou=0.5):
+
+def objectwise_file_score(gt_file, pred_file, area, format, v: bool=True, iou=0.5):
     '''
     All the work with vector data, either in object or in point score
     :param gt_file:
@@ -93,7 +171,6 @@ def vector_file_score(gt_file, pred_file, area, format, v: bool=True, iou=0.5):
 
     try:
         score, score_log = objectwise_f1_score(gt_polygons, pred_geom, format, iou=iou, v=v)
-
     except Exception as e:
         raise Exception(log + 'Error while calculating objectwise f1-score in ' + format + ' format\n' + str(e))
 
@@ -205,7 +282,7 @@ def iou(polygon1: Polygon, polygon2: Polygon):
     return poly1_fixed.buffer(0).intersection(poly2_fixed).area / poly1_fixed.union(poly2_fixed).area
 
 
-def get_geom(json, format) -> List[Point]:
+def get_geom(json, format):
     polys = []  # type: List[Polygon]
     points = [] # type: List[Point]
 
