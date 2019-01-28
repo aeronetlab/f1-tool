@@ -6,7 +6,7 @@ import time
 from flask import Flask, jsonify
 from flask_cors import CORS
 
-from f1_calc import pixelwise_file_score, vector_file_score, get_geom, get_area
+from f1_calc import pixelwise_file_score, objectwise_file_score, get_geom, get_area
 
 app = Flask(__name__)
 INTERNAL_DIR = '/data'
@@ -44,7 +44,7 @@ def evaluate():
     start_time = time.time()
     log = ''
     try:
-        format, v, gt_file, pred_file, log_, area, bbox, iou = parse_request(
+        format, v, gt_file, pred_file, log_, area, bbox, iou, filetype = parse_request(
             flask.request)
     except Exception as e:
         return jsonify({'score': 0.0,
@@ -65,13 +65,13 @@ def evaluate():
 
     if format == 'raster':
         try:
-            score, score_log = pixelwise_file_score(gt_file, pred_file, v)
+            score, score_log = pixelwise_file_score(gt_file, pred_file, v, filetype)
         except Exception as e:
             return jsonify({'score': 0.0, 'log': log + str(e)}), 500
 
     elif format in ['vector', 'point']:
         try:
-            score, score_log = vector_file_score(
+            score, score_log = objectwise_file_score(
                 gt_file, pred_file, area, format, v, iou=iou)
         except Exception as e:
             return jsonify({'score': 0.0, 'log': log + str(e)}), 500
@@ -93,6 +93,7 @@ def parse_request(request):
     log = ''
 
     format = request.args.get('format')
+    filetype = request.args.get('filetype', default='tif')
 
     if format == 'vector':
         try:
@@ -135,7 +136,7 @@ def parse_request(request):
     gt_file = request.files['gt']
     pred_file = request.files['pred']
 
-    return format, v, gt_file, pred_file, log, area, bbox, iou
+    return format, v, gt_file, pred_file, log, area, bbox, iou, filetype
 
 
 if __name__ == '__main__':
