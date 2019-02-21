@@ -2,7 +2,6 @@ shapely
 numpy
 geojson
 rtree
-zipfile
 flask
 flask-cors
 rasterio
