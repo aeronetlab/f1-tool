@@ -2,9 +2,9 @@ import geojson
 import rasterio
 import numpy as np
 
-from .raster import pixelwise_raster_f1
-from .vector import pixelwise_vector_f1, objectwise_f1_score
-from .proc import get_geom, cut_by_area
+from raster import pixelwise_raster_f1
+from vector import pixelwise_vector_f1, objectwise_f1_score
+from proc import get_geom, cut_by_area
 
 
 EPS = 0.00000001
