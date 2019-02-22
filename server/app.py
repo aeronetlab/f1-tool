@@ -6,7 +6,8 @@ import time
 from flask import Flask, jsonify
 from flask_cors import CORS
 
-from f1_calc import pixelwise_file_score, objectwise_file_score, get_geom, get_area
+from f1_calc import pixelwise_file_score, objectwise_file_score
+from proc import get_area, get_geom
 
 app = Flask(__name__)
 INTERNAL_DIR = '/data'
@@ -137,6 +138,7 @@ def parse_request(request):
     pred_file = request.files['pred']
 
     return format, v, gt_file, pred_file, log, area, bbox, iou, filetype
+
 
 
 if __name__ == '__main__':
