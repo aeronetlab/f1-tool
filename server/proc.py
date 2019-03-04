@@ -78,7 +78,7 @@ def cut_by_area(polygons, area):
     :return: new list of polygons without features beyond AOI
     """
     if area:
-        area = MultiPolygon(area)
+        area = MultiPolygon(area).buffer(0)
         polygons = [poly for poly in polygons if poly.intersects(area)]
     return polygons
 
