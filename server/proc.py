@@ -86,3 +86,14 @@ def get_area(bbox: List[float]) -> List[Polygon]:
     poly = Polygon([(bbox[0], bbox[3]), (bbox[0], bbox[1]), (bbox[2], bbox[1]), (bbox[2], bbox[3]), (bbox[0], bbox[3])])
     assert poly.is_valid, "Bounding box polygon " + str(poly) +" is invalid \n"
     return [poly]
+
+def find_intersection(gt_file, pred_file):
+    # return gt_bbox, pred_bbox
+    raise NotImplementedError
+
+def geo_crop (gt_file, pred_file):
+    # gt_bbox, pred_bbox = find_intersection(gt_file, pred_file)
+    # gt_crop = read(gt_file)[gt_bbox]
+    # pred_crop = read(pred_file)[pred_bbox].reshape(gt_crop.shape)
+    # return gt_crop, pred_crop
+    raise NotImplementedError

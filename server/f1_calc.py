@@ -4,7 +4,7 @@ import numpy as np
 
 from raster import pixelwise_raster_f1
 from vector import pixelwise_vector_f1, objectwise_f1_score
-from proc import get_geom, cut_by_area
+from proc import get_geom, cut_by_area, geo_crop
 
 
 EPS = 0.00000001
@@ -45,6 +45,7 @@ def pixelwise_file_score(gt_file,
 
     else: # tif or any other (default) value
         try:
+            '''
             with rasterio.open(gt_file) as src:
                 gt_img = src.read(1)
                 if v:
@@ -56,6 +57,8 @@ def pixelwise_file_score(gt_file,
                 if v:
                     log += "Read predicted image, size = " + str(src.width) + ', ' + str(src.height) \
                            + ', reshaped to size of GT image \n'
+            '''
+            gt_img, pred_img = geo_crop(gt_file, pred_file)
             score, score_log = pixelwise_raster_f1(gt_img, pred_img, v)
         except Exception as e:
             raise Exception(log + 'Failed to read input file as raster\n' + str(e))
