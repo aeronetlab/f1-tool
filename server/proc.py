@@ -88,10 +88,24 @@ def get_area(bbox: List[float]) -> List[Polygon]:
     return [poly]
 
 def find_intersection(gt_file, pred_file):
+    '''
+    Calculates min and max pixel coordinates for the image intersection in each image
+
+    :param gt_file: file object to open with rasterio
+    :param pred_file: file object to open with rasterio
+    :return: [[y0, y1], [x0,x1]], [[y0, y1], [x0,x1]] - start and end pixel coordinates
+    '''
     # return gt_bbox, pred_bbox
     raise NotImplementedError
 
 def geo_crop (gt_file, pred_file):
+    """
+    Crops the intersecting region of 2 images and returns both raster ready ready for comparison
+    (guaranteed equal size and the same georeference)
+    :param gt_file:
+    :param pred_file:
+    :return: 2 not georedferenced arrays for comparison
+    """
     # gt_bbox, pred_bbox = find_intersection(gt_file, pred_file)
     # gt_crop = read(gt_file)[gt_bbox]
     # pred_crop = read(pred_file)[pred_bbox].reshape(gt_crop.shape)
