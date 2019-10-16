@@ -1,6 +1,8 @@
-# F1-score utility
+# About F1-score utility
 
-Geographic data F1-score metric calculation utility
+Geographic data F1-score metric calculation utility.
+
+You can test / use it on our server. [https://f1.aeronetlab.space](https://f1.aeronetlab.space) (the limit for input files is 15000x15000 pixels)
 
 ## Features
 
