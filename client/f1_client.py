@@ -7,7 +7,8 @@ URL = 'http://0.0.0.0:5000/f1'
 @click.command()
 @click.argument("groundtruth_path", type=click.Path(exists=True))
 @click.argument("predicted_path", type=click.Path(exists=True))
-@click.option("--format", required=True, type=click.Choice(['raster', 'vector', 'point']))
+@click.option("--format", required=True, type=click.Choice(['area', 'object', 'point']))
+@click.option("--score", required=True, type=str, default='f1_score')
 @click.option("--iou", type=str, default=0.5, help="Intersection-over-union threshold (default: 0.5)")
 @click.option("-v", is_flag=True, help='Enables verbose output')
 @click.option("--url", default=URL, help='Specifies url instead of default')
@@ -17,7 +18,8 @@ URL = 'http://0.0.0.0:5000/f1'
 
 def command(groundtruth_path,
             predicted_path,
-            format='raster',
+            format='area',
+            score_fn='f1_score',
             v=False, iou=0.5,
             url=URL, area=None,
             bbox=None):
@@ -29,7 +31,7 @@ def command(groundtruth_path,
         filetype = 'geojson'
     else:
         filetype = 'tif'
-    params = {'v': v, 'iou': iou, 'format': format, 'filetype': filetype}
+    params = {'v': v, 'iou': iou, 'method': format, 'score_fn': score_fn, 'filetype': filetype}
     if bbox:
         params['bbox'] = bbox
     files = {'gt': open(groundtruth_path, 'rb'),
@@ -41,9 +43,10 @@ def command(groundtruth_path,
     if v:
         print(response.json()['log'])
     if response.status_code != 200:
-        print ("Error " + str(response.status_code))
+        print("Error " + str(response.status_code))
     else:
         print("F1 score = %.3f" % response.json()['score'])
+
 
 if __name__ == '__main__':
     command()

@@ -5,17 +5,27 @@ from shapely.geometry import MultiPolygon, Polygon, Point,  asShape
 
 # Vector preprocessing functions
 
-def get_geom(json, format):
-    """ Extracts all the polygons from the geojson object and reproject them to lat-lon crs
+
+def get_geom(json, geom_type='polygon'):
+    """
+
+    Extracts all the polygons from the geojson object and reproject them to lat-lon crs
     The lines are ignored, while multipolygons are divided into individual polygons and concatenated
     with polygons list.
-    If format == 'point', al the points are extracted, and for every polygon its centroid is returned
+    If format == 'point', all the points are extracted, and for every polygon its centroid is returned
 
-    :param json: Input json structure
-    :param format: 'vector' or 'point', represents return data type
-    # TODO: refactor - change this param name
-    :return: list of geometries
+    Args:
+        json: Input json structure
+        geom_type: 'polygon' or 'point', represents return data type
+
+    Returns:
+        list of geometries of the selected type
+
     """
+
+    if geom_type.lower() not in ['polygon', 'point']:
+        raise ValueError(f'Param geom_type must be either `polygon` or `point`, got {geom_type} instead')
+
     polys = []  # type: List[Polygon]
     points = [] # type: List[Point]
 
@@ -63,9 +73,9 @@ def get_geom(json, format):
         else:
             pass # raise Exception("Unexpected FeatureType:\n" + f.geometry['type'] + "\nExpected Polygon or MultiPolygon")
 
-    if format == 'vector':
+    if geom_type == 'polygon':
         return polys
-    else:  # format == 'point':
+    else: # geom_type == 'point':
         points += [poly.centroid for poly in polys]
         return points
 
@@ -81,6 +91,7 @@ def cut_by_area(polygons, area):
         area = MultiPolygon(area).buffer(0)
         polygons = [poly for poly in polygons if poly.intersects(area)]
     return polygons
+
 
 def get_area(bbox: List[float]) -> List[Polygon]:
     poly = Polygon([(bbox[0], bbox[3]), (bbox[0], bbox[1]), (bbox[2], bbox[1]), (bbox[2], bbox[3]), (bbox[0], bbox[3])])

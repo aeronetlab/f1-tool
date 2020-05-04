@@ -6,8 +6,8 @@ import time
 from flask import Flask, jsonify
 from flask_cors import CORS
 
-from f1_calc import pixelwise_file_score, objectwise_file_score
-from proc import get_area, get_geom
+from .metrics import objectwise_score, objectwise_point_score, areawise_score, get_scoring_function
+from .proc import get_area, get_geom
 
 app = Flask(__name__)
 INTERNAL_DIR = '/data'
@@ -40,45 +40,42 @@ def heartbeat():
 @app.route("/f1", methods=["POST"])
 def evaluate():
 
-    # task={'iou':'0.5'}
-    # files={}
     start_time = time.time()
-    log = ''
     try:
-        format, v, gt_file, pred_file, log_, area, bbox, iou, filetype = parse_request(
+        gt_file, pred_file, area, method, score_fn, iou, filetype, v, log = parse_request(
             flask.request)
     except Exception as e:
         return jsonify({'score': 0.0,
-                        'log': log + 'Invalid request:\n' + str(e)}),
+                        'log': 'Invalid request:\n' + str(e)}),
         400
-    log += log_
+
     '''
     if (gt_file.filename[-4:].lower() == '.tif' or gt_file.filename[-5:].lower() == '.tiff') and \
         (pred_file.filename[-4:].lower() == '.tif' or pred_file.filename[-5:].lower() == '.tiff'):
-        format = 'raster'
-    elif gt_file.filename[-8:].lower() == '.geojson' and pred_file.filename[-8:].lower() == '.geojson':
-        format = 'vector'
-    else:
-        return jsonify({'score': 0.0,
-                        'log': 'Invalid request. gt and pred files must be both tiff or both geojson'}), \
-               400
+        pass
+    Maybe derive the filetype from the extension? Makes sense, if the filename is preserved during the transition
     '''
 
-    if format == 'raster':
+    if method == 'area':
         try:
-            score, score_log = pixelwise_file_score(gt_file, pred_file, v, filetype)
+            score, score_log = areawise_score(gt_file, pred_file, score_fn, area, filetype, v)
         except Exception as e:
             return jsonify({'score': 0.0, 'log': log + str(e)}), 500
 
-    elif format in ['vector', 'point']:
+    elif method == 'object':
         try:
-            score, score_log = objectwise_file_score(
-                gt_file, pred_file, area, format, v, iou=iou)
+            score, score_log = objectwise_score(gt_file, pred_file, area, score_fn, iou, v)
+        except Exception as e:
+            return jsonify({'score': 0.0, 'log': log + str(e)}), 500
+
+    elif method == 'point':
+        try:
+            score, score_log = objectwise_point_score(gt_file, pred_file, area, score_fn, v)
         except Exception as e:
             return jsonify({'score': 0.0, 'log': log + str(e)}), 500
 
     else:
-        return jsonify({'score': 0.0, 'log': 'Invalid format. Expected: raster/vector/point'}), 400
+        return jsonify({'score': 0.0, 'log': f'Invalid method {method}. Expected: area/object/point'}), 400
 
     log += score_log
     log += 'Execution time: ' + str(time.time() - start_time)
@@ -90,16 +87,35 @@ def evaluate():
 
 
 def parse_request(request):
+    """
 
+    :param request: an HTTP-request to be parsed.
+
+    It must contain:
+    - method: the name of the method to use. Allowed: f1-pixel, f1-object, f1-point
+    - filetype: file extension, tif or geojson. Actually, other raster file formats are also supported
+    - gt_file: the file with Ground Truth data
+    - pred_file: the file with Predicted data, whisch we want to compare to Ground Truth data using the method
+
+    Optional parameters are:
+    - area: a geojson file containing the area boundaries; the pred and gt data are cut by the area and all objects out
+            of the area are ignored.
+    - v: verbose, default False, if True the log is returned
+    - bbox: bounding box ('min_lon, min_lat, max_lon, max_lat') which acts the same as the area.
+            If both area and bbox are specified, the area overrides the bbox
+    - score_fn: function that is used to calculate the final metrics from tp,tn,fp and fn values. Defaults to f1-score
+
+    :return:
+    """
     log = ''
 
-    format = request.args.get('format')
+    method = request.args.get('method')
     filetype = request.args.get('filetype', default='tif')
 
-    if format == 'vector':
+    if method == 'object':
         try:
             iou = float(request.args.get('iou'))
-            assert iou < 1.0 and iou > 0.0, "IoU must be from 0 to 1"
+            assert 1.0 > iou > 0.0, "IoU must be from 0 to 1"
         except Exception:
             log += "Iou is not specified correctly, using default value 0.5\n"
             iou = 0.5
@@ -108,9 +124,11 @@ def parse_request(request):
         iou = None
     v = request.args.get('v') in ['True', 'true', 'yes', 'Yes', 'y', 'Y']
 
+    # if function is not specified, f1-score is used. It may be not necessary for the method, so it is not required
+    score_fn = get_scoring_function(request.args.get('score_fn', default='f1_score'))
+
     # area is preferred over bbox, so if both are specified, area overrides bbox
     area = None
-    bbox = None
     if request.args.get('bbox'):
         try:
             bbox = [float(s) for s in request.args.get('bbox').split(',')]
@@ -125,20 +143,20 @@ def parse_request(request):
         area_file = request.files['area']
         try:
             area_gj = geojson.load(area_file)
-            area = get_geom(area_gj, format='vector')
+            area = get_geom(area_gj, geom_type='polygon')
         except Exception as e:
             log += "Specified area is invalid, ignoring it \n" \
                    "Correct format is geojson containining Polygons or MultiPolygon" \
                    + str(e) + '\n'
 
+    # Fetching files
     if 'gt' not in request.files.keys() or 'pred' not in request.files.keys():
         raise Exception('Invalid request. Expected: gt and pred files')
 
     gt_file = request.files['gt']
     pred_file = request.files['pred']
 
-    return format, v, gt_file, pred_file, log, area, bbox, iou, filetype
-
+    return gt_file, pred_file, area, method, score_fn, iou, filetype, v, log
 
 
 if __name__ == '__main__':
