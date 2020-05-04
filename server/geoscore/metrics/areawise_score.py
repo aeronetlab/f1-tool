@@ -2,10 +2,8 @@ import geojson
 import rasterio
 import numpy as np
 from typing import List
-from server.proc import get_geom
+from geoscore.proc import get_geom
 from shapely.geometry import MultiPolygon, Polygon
-
-from .common import f1_score
 
 
 def areawise_score(gt_file, pred_file, score_fn, area=None, filetype='tif', v: bool = False):
@@ -35,7 +33,7 @@ def areawise_score(gt_file, pred_file, score_fn, area=None, filetype='tif', v: b
         try:
             gt = geojson.load(gt_file)
             # GT is always as polygons, not points
-            gt_polygons = get_geom(gt, 'vector')
+            gt_polygons = get_geom(gt, 'polygon')
             if v:
                 log += "Read groundtruth geojson, contains " + str(len(gt_polygons)) + " polygons \n"
         except Exception as e:
@@ -109,7 +107,7 @@ def areawise_vector_score(gt: List[Polygon], pred: List[Polygon], score_fn, area
 
     if area is None:
         # if the area is not specified, we get the GT bounding rectangle as the area
-        area = gt_mp.envelope
+        area = gt_mp.union(pred_mp).convex_hull
 
     tp = gt_mp.intersection(pred_mp).area
     fp = pred_mp.area - tp

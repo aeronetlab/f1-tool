@@ -8,7 +8,7 @@ URL = 'http://0.0.0.0:5000/f1'
 @click.argument("groundtruth_path", type=click.Path(exists=True))
 @click.argument("predicted_path", type=click.Path(exists=True))
 @click.option("--format", required=True, type=click.Choice(['area', 'object', 'point']))
-@click.option("--score", required=True, type=str, default='f1_score')
+@click.option("--score_fn", required=True, type=str, default='f1_score')
 @click.option("--iou", type=str, default=0.5, help="Intersection-over-union threshold (default: 0.5)")
 @click.option("-v", is_flag=True, help='Enables verbose output')
 @click.option("--url", default=URL, help='Specifies url instead of default')
@@ -25,7 +25,7 @@ def command(groundtruth_path,
             bbox=None):
 
     if v:
-        print('Calculating f1-score for files:\n ground truth %s \n prediction %s' %(groundtruth_path, predicted_path))
+        print(f'Calculating {score_fn} for files:\n ground truth %s \n prediction %s' %(groundtruth_path, predicted_path))
 
     if groundtruth_path[-8:] == '.geojson':
         filetype = 'geojson'
@@ -45,7 +45,7 @@ def command(groundtruth_path,
     if response.status_code != 200:
         print("Error " + str(response.status_code))
     else:
-        print("F1 score = %.3f" % response.json()['score'])
+        print(f"{score_fn} = %.3f" % response.json()['score'])
 
 
 if __name__ == '__main__':

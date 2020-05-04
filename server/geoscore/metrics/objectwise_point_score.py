@@ -5,8 +5,7 @@ from shapely.wkb import dumps, loads
 from shapely.geometry import Polygon
 import geojson
 
-from server.proc import get_geom, cut_by_area
-from .common import f1_score
+from geoscore.proc import get_geom, cut_by_area
 
 
 def objectwise_point_score(gt_file, pred_file, area, score_fn, v: bool = True):

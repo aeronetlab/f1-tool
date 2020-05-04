@@ -25,17 +25,20 @@ def get_scoring_function(name, **kwargs):
     return scoring_functions[name]
 
 
-def precision(tp, fp, tn, fn):
+def check_input(tp, fp, tn, fn):
     if tp < 0 or fp < 0 or tn < 0 or fn < 0:
-        raise ValueError("All the values must be non-negative")
+        raise ValueError(f'All the values must be non-negative, got TP={tp}, TN={tn}, FP={fp}, FN={fn}')
+
+
+def precision(tp, fp, tn, fn):
+    check_input(tp, fp, tn, fn)
     if tp == 0:
         return 0
     return tp / (tp + fp)
 
 
 def recall(tp, fp, tn, fn):
-    if tp < 0 or fp < 0 or tn < 0 or fn < 0:
-        raise ValueError("All the values must be non-negative")
+    check_input(tp, fp, tn, fn)
     if tp == 0:
         return 0
     return  tp / (tp + fn)
@@ -43,8 +46,7 @@ def recall(tp, fp, tn, fn):
 
 def get_f_score(beta):
     def f_beta_score(tp, fp, tn, fn):
-        if tp < 0 or fp < 0 or tn < 0 or fn < 0:
-            raise ValueError("All the values must be non-negative")
+        check_input(tp, fp, tn, fn)
         if tp == 0:
             return 0.
         pr = precision(tp, fp, tn, fn)
@@ -59,16 +61,14 @@ def f1_score(tp, fp, tn, fn):
 
 
 def accuracy(tp, fp, tn, fn):
-    if tp < 0 or fp < 0 or tn < 0 or fn < 0:
-        raise ValueError("All the values must be non-negative")
+    check_input(tp, fp, tn, fn)
     if tp == 0:
         return 0
-    return (tp+tn)(tp+tn+fp+fn)
+    return (tp+tn)/(tp+tn+fp+fn)
 
 
 def jaccard(tp, fp, tn, fn):
-    if tp < 0 or fp < 0 or tn < 0 or fn < 0:
-        raise ValueError("All the values must be non-negative")
+    check_input(tp, fp, tn, fn)
     if tp == 0:
         return 0
     return tp/(tp+fn+fp)

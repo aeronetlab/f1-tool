@@ -6,8 +6,8 @@ import time
 from flask import Flask, jsonify
 from flask_cors import CORS
 
-from .metrics import objectwise_score, objectwise_point_score, areawise_score, get_scoring_function
-from .proc import get_area, get_geom
+from metrics import objectwise_score, objectwise_point_score, areawise_score, get_scoring_function
+from proc import get_area, get_geom
 
 app = Flask(__name__)
 INTERNAL_DIR = '/data'
@@ -45,9 +45,9 @@ def evaluate():
         gt_file, pred_file, area, method, score_fn, iou, filetype, v, log = parse_request(
             flask.request)
     except Exception as e:
-        return jsonify({'score': 0.0,
-                        'log': 'Invalid request:\n' + str(e)}),
-        400
+        res = jsonify({'score': 0.0, 'log': 'Invalid request:' + str(e)}), 400
+        print(res)
+        return res  # jsonify({'score': 0.0, 'log': 'Invalid request:\n' + str(e)}), 400
 
     '''
     if (gt_file.filename[-4:].lower() == '.tif' or gt_file.filename[-5:].lower() == '.tiff') and \

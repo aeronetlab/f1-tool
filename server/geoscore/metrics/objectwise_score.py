@@ -5,8 +5,7 @@ from shapely.wkb import dumps, loads
 from shapely.geometry import Polygon
 import geojson
 
-from server.proc import get_geom, cut_by_area
-from .common import f1_score
+from geoscore.proc import get_geom, cut_by_area
 
 
 def objectwise_score(gt_file, pred_file, area, score_fn, iou=0.5, v: bool = True):
@@ -27,7 +26,7 @@ def objectwise_score(gt_file, pred_file, area, score_fn, iou=0.5, v: bool = True
     try:
         gt = geojson.load(gt_file)
         # GT is always as polygons, not points
-        gt_polygons = get_geom(gt, 'vector')
+        gt_polygons = get_geom(gt, 'polygon')
         if v:
             log += "Read groundtruth geojson, contains " + str(len(gt_polygons)) + " polygons \n"
     except Exception as e:
