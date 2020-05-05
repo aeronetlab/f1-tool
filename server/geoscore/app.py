@@ -6,7 +6,7 @@ import time
 from flask import Flask, jsonify
 from flask_cors import CORS
 
-from metrics import objectwise_score, objectwise_point_score, areawise_score, get_scoring_function
+from metrics import objectwise_score, objectwise_point_score, areawise_score, get_scoring_function, total_area_score
 from proc import get_area, get_geom
 
 app = Flask(__name__)
@@ -73,6 +73,11 @@ def evaluate():
             score, score_log = objectwise_point_score(gt_file, pred_file, area, score_fn, v)
         except Exception as e:
             return jsonify({'score': 0.0, 'log': log + str(e)}), 500
+    elif method == 'total_area':
+        try:
+            score, score_log = total_area_score(gt_file, pred_file, area, filetype, v)
+        except Exception as e:
+            return jsonify({'score': 0.0, 'log': log + str(e)}), 500
 
     else:
         return jsonify({'score': 0.0, 'log': f'Invalid method {method}. Expected: area/object/point'}), 400
@@ -125,8 +130,10 @@ def parse_request(request):
     v = request.args.get('v') in ['True', 'true', 'yes', 'Yes', 'y', 'Y']
 
     # if function is not specified, f1-score is used. It may be not necessary for the method, so it is not required
-    score_fn = get_scoring_function(request.args.get('score_fn', default='f1_score'))
-
+    score_fn = request.args.get('score_fn')
+    if not score_fn:
+        score_fn = 'f1_score'
+    score_fn = get_scoring_function(score_fn)
     # area is preferred over bbox, so if both are specified, area overrides bbox
     area = None
     if request.args.get('bbox'):

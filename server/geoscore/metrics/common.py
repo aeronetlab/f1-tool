@@ -1,3 +1,4 @@
+import warnings
 EPS = 0.00000001
 """
 Here is a set of scoring functions which can be derived from true positive, 
@@ -8,7 +9,13 @@ false positive, true negative, false negative values.
 def get_scoring_function(name, **kwargs):
 
     if name == 'f_score':
-        beta = kwargs.get('beta')
+        beta_ = kwargs.get('beta')
+        try:
+            beta = float(beta_)
+            assert beta>0
+        except Exception:
+            warnings.warn(f'Beta must be a positive number, got {beta_}. Using 1 instead')
+            beta = 1
         return get_f_score(beta)
 
     scoring_functions = {
@@ -23,7 +30,6 @@ def get_scoring_function(name, **kwargs):
         raise KeyError(f'Unknown scoring function {name}. \n Allowed functions are: {list(scoring_functions.keys())}')
 
     return scoring_functions[name]
-
 
 def check_input(tp, fp, tn, fn):
     if tp < 0 or fp < 0 or tn < 0 or fn < 0:
