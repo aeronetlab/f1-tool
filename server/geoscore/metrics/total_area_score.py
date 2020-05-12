@@ -5,7 +5,6 @@ from typing import List
 from geoscore.proc import get_geom, cut_by_area
 from shapely.geometry import Polygon, MultiPolygon
 
-
 def total_area_score(gt_file, pred_file, area=None, filetype='tif', v:bool = False):
     """
 
@@ -41,8 +40,8 @@ def total_area_score(gt_file, pred_file, area=None, filetype='tif', v:bool = Fal
 
         if area:
             try:
-                gt_polygons = cut_by_area(gt_polygons, area)
-                pred_polygons = cut_by_area(pred_polygons, area)
+                gt_polygons = cut_by_area(gt_polygons, area, True)
+                pred_polygons = cut_by_area(pred_polygons, area, True)
             except Exception as e:
                 log += "Intersection cannot be calculated, ignoring area \n" \
                        + str(e) + '\n'

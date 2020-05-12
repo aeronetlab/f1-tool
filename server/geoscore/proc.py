@@ -1,6 +1,7 @@
 import geojson
 from typing import List
 from rasterio.warp import transform_geom
+from rasterio.crs import CRS, CRSError
 from shapely.geometry import MultiPolygon, Polygon, Point,  asShape
 
 # Vector preprocessing functions
@@ -30,9 +31,9 @@ def get_geom(json, geom_type='polygon'):
     points = [] # type: List[Point]
 
     # the crs may be specified by the geojson standard or as 'crs':'EPSG:____', we should accept both
-    if isinstance(json['crs'], str):
-        src_crs = json['crs']
-    else:
+    try:
+        src_crs = CRS.from_user_input(json['crs'])
+    except CRSError:
         src_crs = json['crs']['properties']['name']
 
     # then we will reproject all to lat-lon (EPSG:4326)
@@ -80,16 +81,24 @@ def get_geom(json, geom_type='polygon'):
         return points
 
 
-def cut_by_area(polygons, area):
+def cut_by_area(polygons, area, cut_features=False):
     """ Cuts away all the polygons that do not intersect area
 
     :param polygons: geometry, list of shapely(?) polygons
     :param area: Area of interest
     :return: new list of polygons without features beyond AOI
     """
-    if area:
-        area = MultiPolygon(area).buffer(0)
-        polygons = [poly for poly in polygons if poly.intersects(area)]
+
+    area = MultiPolygon(area).buffer(0)
+    if not cut_features:
+        # We leave all the features intersecting the area whole
+        polygons = [poly.buffer(0) for poly in polygons
+                    if poly.buffer(0).intersects(area)]
+    else:
+        # We cut away all the out-or-area parts of the polygons
+        polygons = [poly.buffer(0).intersection(area) for poly in polygons
+                    if not poly.buffer(0).intersection(area).is_empty]
+
     return polygons
 
 

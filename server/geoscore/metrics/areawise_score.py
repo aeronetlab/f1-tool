@@ -2,7 +2,7 @@ import geojson
 import rasterio
 import numpy as np
 from typing import List
-from geoscore.proc import get_geom
+from geoscore.proc import get_geom, cut_by_area
 from shapely.geometry import MultiPolygon, Polygon
 
 
@@ -38,6 +38,19 @@ def areawise_score(gt_file, pred_file, score_fn, area=None, filetype='tif', v: b
                 log += "Read groundtruth geojson, contains " + str(len(gt_polygons)) + " polygons \n"
         except Exception as e:
             raise Exception(log + 'Failed to read groundtruth file as geojson\n' + str(e))
+
+        if area:
+            try:
+                gt_polygons = cut_by_area(gt_polygons, area, True)
+                pred_polygons = cut_by_area(pred_polygons, area, True)
+            except Exception as e:
+                log += "Intersection cannot be calculated, ignoring area \n" \
+                       + str(e) + '\n'
+
+            log += "Cut vector data by specified area:\n" + \
+                   str(len(gt_polygons)) + " groundtruth and " + \
+                   str(len(pred_polygons)) + " predicted polygons inside\n"
+
         score, score_log = areawise_vector_score(gt_polygons, pred_polygons, score_fn, area, v)
 
     else:  # tif or any other (default) value
@@ -112,7 +125,7 @@ def areawise_vector_score(gt: List[Polygon], pred: List[Polygon], score_fn, area
     tp = gt_mp.intersection(pred_mp).area
     fp = pred_mp.area - tp
     fn = gt_mp.area - tp
-    tn = area.area - tp - fp - fn
+    tn = MultiPolygon(area).area - tp - fp - fn
     score = score_fn(tp, fp, tn, fn)
 
     if v:
