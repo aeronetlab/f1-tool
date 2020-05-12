@@ -3,6 +3,7 @@ import rasterio
 import numpy as np
 from typing import List
 from geoscore.proc import get_geom
+from geoscore.io import extract_data
 from shapely.geometry import MultiPolygon, Polygon
 
 
@@ -21,41 +22,16 @@ def areawise_score(gt_file, pred_file, score_fn, area=None, filetype='tif', v: b
 
     """
     log = ''
+    try:
+        gt_data, pred_data, read_log = extract_data(gt_file, pred_file, filetype, v=v)
+        if v:
+            log += read_log
+    except Exception as e:
+        raise Exception(log + 'Failed to read files\n' + str(e))
     if filetype == 'geojson':
-        try:
-            pred = geojson.load(pred_file)
-            pred_polygons = get_geom(pred, 'polygon')
-            if v:
-                log += "Read predicted geojson, contains " + str(len(pred_polygons)) + " objects \n"
-        except Exception as e:
-            raise Exception(log + 'Failed to read prediction file as geojson\n' + str(e))
-
-        try:
-            gt = geojson.load(gt_file)
-            # GT is always as polygons, not points
-            gt_polygons = get_geom(gt, 'polygon')
-            if v:
-                log += "Read groundtruth geojson, contains " + str(len(gt_polygons)) + " polygons \n"
-        except Exception as e:
-            raise Exception(log + 'Failed to read groundtruth file as geojson\n' + str(e))
-        score, score_log = areawise_vector_score(gt_polygons, pred_polygons, score_fn, area, v)
-
+        score, score_log = areawise_vector_score(gt_data['all'], pred_data['all'], score_fn, area, v)
     else:  # tif or any other (default) value
-        try:
-            with rasterio.open(gt_file) as src:
-                gt_img = src.read(1)
-                if v:
-                    log += "Read groundtruth image, size = " + str(gt_img.shape) + "\n"
-            with rasterio.open(pred_file) as src:
-                # reading into the pre-allocated array guarantees equal sizes
-                pred_img = np.empty(gt_img.shape, dtype=src.dtypes[0])
-                src.read(1, out=pred_img)
-                if v:
-                    log += "Read predicted image, size = " + str(src.width) + ', ' + str(src.height) \
-                           + ', reshaped to size of GT image \n'
-            score, score_log = pixelwise_raster_score(gt_img, pred_img, score_fn, v)
-        except Exception as e:
-            raise Exception(log + 'Failed to read input file as raster\n' + str(e))
+        score, score_log = pixelwise_raster_score(gt_data, pred_data, score_fn, v)
     return score, log + score_log
 
 
