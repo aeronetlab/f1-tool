@@ -20,6 +20,7 @@ def areawise_score(gt_file, pred_file, score_fn, area=None, filetype='tif', v: b
     Returns:
 
     """
+
     log = ''
     if filetype == 'geojson':
         try:
@@ -121,14 +122,18 @@ def areawise_vector_score(gt: List[Polygon], pred: List[Polygon], score_fn, area
     if area is None:
         # if the area is not specified, we get the GT bounding rectangle as the area
         area = gt_mp.union(pred_mp).convex_hull
-
+    else:
+        area = MultiPolygon(area)
     tp = gt_mp.intersection(pred_mp).area
     fp = pred_mp.area - tp
     fn = gt_mp.area - tp
-    tn = MultiPolygon(area).area - tp - fp - fn
+    tn = area.area - tp - fp - fn
     score = score_fn(tp, fp, tn, fn)
 
     if v:
-        log += 'True Positive = ' + str(tp) + ', False Negative = ' + str(fn) + ', False Positive = ' + str(fp) + '\n'
+        log += 'True Positive = ' + str(tp) + \
+               ', False Negative = ' + str(fn) + \
+               ', False Positive = ' + str(fp) + \
+               ', True Negative = ' + str(tn) + '\n'
 
     return score, log

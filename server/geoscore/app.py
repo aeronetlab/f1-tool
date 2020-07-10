@@ -46,7 +46,6 @@ def evaluate():
             flask.request)
     except Exception as e:
         res = jsonify({'score': 0.0, 'log': 'Invalid request:' + str(e)}), 400
-        print(res)
         return res  # jsonify({'score': 0.0, 'log': 'Invalid request:\n' + str(e)}), 400
 
     '''
@@ -80,7 +79,8 @@ def evaluate():
             return jsonify({'score': 0.0, 'log': log + str(e)}), 500
 
     else:
-        return jsonify({'score': 0.0, 'log': f'Invalid method {method}. Expected: area/object/point'}), 400
+        res = jsonify({'score': 0.0, 'log': f'Invalid method {method}. Expected: area/object/point'}), 400
+        return res
 
     log += score_log
     log += 'Execution time: ' + str(time.time() - start_time)

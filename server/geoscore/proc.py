@@ -31,9 +31,11 @@ def get_geom(json, geom_type='polygon'):
     points = [] # type: List[Point]
 
     # the crs may be specified by the geojson standard or as 'crs':'EPSG:____', we should accept both
+    print(json['crs'])
     try:
         src_crs = CRS.from_user_input(json['crs'])
-    except CRSError:
+    except CRSError as e:
+        print(str(e))
         src_crs = json['crs']['properties']['name']
 
     # then we will reproject all to lat-lon (EPSG:4326)
