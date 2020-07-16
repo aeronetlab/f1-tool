@@ -121,8 +121,8 @@ def areawise_vector_score(gt: List[Polygon], pred: List[Polygon], score_fn, area
     print('begin')
     t = time()
 
-    gt_fc = ds.FeatureCollection([ds.Feature(poly) for poly in gt])
-    pred_fc = ds.FeatureCollection([ds.Feature(poly) for poly in pred])
+    gt_fc = ds.FeatureCollection([ds.Feature(poly) for poly in gt if poly.buffer(0).is_valid])
+    pred_fc = ds.FeatureCollection([ds.Feature(poly) for poly in pred if poly.buffer(0).is_valid])
 
     print(f'fc: {time() - t}')
     t = time()
@@ -136,26 +136,36 @@ def areawise_vector_score(gt: List[Polygon], pred: List[Polygon], score_fn, area
     print(f'intersection: {time() - t}')
     t = time()
 
-    pred_mp = MultiPolygon(pred).buffer(0)
-    gt_mp = MultiPolygon(gt).buffer(0)
-
+    # We assume that features do not intersect. Bold assumption, but will do for now!
+    pred_area = np.sum([feat.shape.area for feat in pred_fc])
+    gt_area = np.sum([feat.shape.area for feat in gt_fc])
     print(f'mo: {time() - t}')
     t = time()
 
     tp = intersection
-    fp = pred_mp.area - tp
-    fn = gt_mp.area - tp
+    fp = pred_area - tp
+    fn = gt_area - tp
 
     print(f'area: {time() - t}')
     t = time()
 
     if area is None:
         # if the area is not specified, we get the GT bounding rectangle as the area
-        area = gt_mp.union(pred_mp).convex_hull
+        lon1, lat1, lon2, lat2 = gt_fc.index.bounds
+        lon1_pred, lat1_pred, lon2_pred, lat2_pred = pred_fc.index.bounds
+
+        lon1 = min(lon1, lon1_pred)
+        lat1 = min(lat1, lat1_pred)
+        lon2 = max(lon2, lon2_pred)
+        lat2 = max(lat2, lat2_pred)
+
+        area = Polygon([[lon1, lat1], [lon1, lat2], [lon2, lat2], [lon2, lat1], [lon1, lat1]])
+        print(area)
+
     else:
         area = MultiPolygon(area)
     print(f'union: {time() - t}')
-    t = time()
+
     tn = area.area - tp - fp - fn
     score = score_fn(tp, fp, tn, fn)
 
