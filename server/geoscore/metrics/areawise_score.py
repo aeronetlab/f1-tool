@@ -4,7 +4,9 @@ import numpy as np
 from typing import List
 from geoscore.proc import get_geom, cut_by_area
 from shapely.geometry import MultiPolygon, Polygon
+import aeronet.dataset as ds
 
+from time import time
 
 def areawise_score(gt_file, pred_file, score_fn, area=None, filetype='tif', v: bool = False):
     """
@@ -40,6 +42,9 @@ def areawise_score(gt_file, pred_file, score_fn, area=None, filetype='tif', v: b
         except Exception as e:
             raise Exception(log + 'Failed to read groundtruth file as geojson\n' + str(e))
 
+
+        # For techinspec we ignore area cutting because the areas already match. But we need the area to calculate
+        # accuracy properly, so we cannot skip the area argument
         if area:
             try:
                 gt_polygons = cut_by_area(gt_polygons, area, True)
@@ -51,6 +56,8 @@ def areawise_score(gt_file, pred_file, score_fn, area=None, filetype='tif', v: b
             log += "Cut vector data by specified area:\n" + \
                    str(len(gt_polygons)) + " groundtruth and " + \
                    str(len(pred_polygons)) + " predicted polygons inside\n"
+
+
 
         score, score_log = areawise_vector_score(gt_polygons, pred_polygons, score_fn, area, v)
 
@@ -110,23 +117,45 @@ def areawise_vector_score(gt: List[Polygon], pred: List[Polygon], score_fn, area
     Returns:
         float, f1-score and string, log
     """
-
     log = ''
-    gt_mp = MultiPolygon(gt)
-    pred_mp = MultiPolygon(pred)
+    print('begin')
+    t = time()
 
-    # try making polygons valid
-    gt_mp = gt_mp.buffer(0)
-    pred_mp = pred_mp.buffer(0)
+    gt_fc = ds.FeatureCollection([ds.Feature(poly) for poly in gt])
+    pred_fc = ds.FeatureCollection([ds.Feature(poly) for poly in pred])
+
+    print(f'fc: {time() - t}')
+    t = time()
+
+    intersection = 0
+    for feat in gt_fc:
+        pred_inter = pred_fc.intersection(feat)
+        for pred_f in pred_inter:
+            intersection += pred_f.apply(lambda x: x.intersection(feat.shape)).area
+
+    print(f'intersection: {time() - t}')
+    t = time()
+
+    pred_mp = MultiPolygon(pred).buffer(0)
+    gt_mp = MultiPolygon(gt).buffer(0)
+
+    print(f'mo: {time() - t}')
+    t = time()
+
+    tp = intersection
+    fp = pred_mp.area - tp
+    fn = gt_mp.area - tp
+
+    print(f'area: {time() - t}')
+    t = time()
 
     if area is None:
         # if the area is not specified, we get the GT bounding rectangle as the area
         area = gt_mp.union(pred_mp).convex_hull
     else:
         area = MultiPolygon(area)
-    tp = gt_mp.intersection(pred_mp).area
-    fp = pred_mp.area - tp
-    fn = gt_mp.area - tp
+    print(f'union: {time() - t}')
+    t = time()
     tn = area.area - tp - fp - fn
     score = score_fn(tp, fp, tn, fn)
 

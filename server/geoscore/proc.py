@@ -94,14 +94,20 @@ def cut_by_area(polygons, area, cut_features=False):
     area = MultiPolygon(area).buffer(0)
     if not cut_features:
         # We leave all the features intersecting the area whole
-        polygons = [poly.buffer(0) for poly in polygons
-                    if poly.buffer(0).intersects(area)]
+        new_polygons = [poly.buffer(0) for poly in polygons
+                        if poly.buffer(0).intersects(area)]
     else:
-        # We cut away all the out-or-area parts of the polygons
-        polygons = [poly.buffer(0).intersection(area) for poly in polygons
-                    if not poly.buffer(0).intersection(area).is_empty]
+        new_polygons = []
+        for poly in polygons:
+            new_poly = poly.buffer(0).intersection(area)
+            if not new_poly.is_empty:
+                if isinstance(new_poly, Polygon):
+                    new_polygons.append(new_poly)
+                elif isinstance(new_poly, MultiPolygon):
+                    new_polygons += [p for p in new_poly]
+                    print([p for p in new_poly])
 
-    return polygons
+    return new_polygons
 
 
 def get_area(bbox: List[float]) -> List[Polygon]:

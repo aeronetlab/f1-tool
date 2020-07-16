@@ -1,7 +1,7 @@
 FROM aeronetlab/prod:1.2-cpu
 ## Additional packages etc.
 
-RUN pip install flask && pip install flask-cors && pip install -U rasterio==1.1.4
+RUN pip install flask && pip install flask-cors && pip install -U rasterio==1.1.4 && pip install -U aeronet==0.0.8
 
 ## App
 
