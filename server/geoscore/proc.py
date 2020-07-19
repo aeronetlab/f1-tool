@@ -7,7 +7,7 @@ from shapely.geometry import MultiPolygon, Polygon, Point,  asShape
 # Vector preprocessing functions
 
 
-def get_geom(json, geom_type='polygon'):
+def get_geom(json, geom_type='polygon', property=None):
     """
 
     Extracts all the polygons from the geojson object and reproject them to lat-lon crs
@@ -41,7 +41,11 @@ def get_geom(json, geom_type='polygon'):
     # then we will reproject all to lat-lon (EPSG:4326)
     dst_crs = 'EPSG:4326'
 
-    for f in json.features:
+    if property is not None:
+        features = [feat for feat in json.features if property <= feat['properties']]
+    else:
+        features = json.features
+    for f in features:
         if isinstance(f.geometry, geojson.MultiPolygon):
             try:
                 new_geom = transform_geom(src_crs=src_crs,
@@ -78,7 +82,7 @@ def get_geom(json, geom_type='polygon'):
 
     if geom_type == 'polygon':
         return polys
-    else: # geom_type == 'point':
+    else:  # geom_type == 'point':
         points += [poly.centroid for poly in polys]
         return points
 

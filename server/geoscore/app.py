@@ -42,7 +42,7 @@ def evaluate():
 
     start_time = time.time()
     try:
-        gt_file, pred_file, area, method, score_fn, iou, filetype, v, log = parse_request(
+        gt_file, pred_file, area, score_fn, v, log = parse_request(
             flask.request)
     except Exception as e:
         res = jsonify({'score': 0.0, 'log': 'Invalid request:' + str(e)}), 400
@@ -55,39 +55,21 @@ def evaluate():
     Maybe derive the filetype from the extension? Makes sense, if the filename is preserved during the transition
     '''
 
-    if method == 'area':
-        try:
-            score, score_log = areawise_score(gt_file, pred_file, score_fn, area, filetype, v)
-        except Exception as e:
-            return jsonify({'score': 0.0, 'log': log + str(e)}), 500
+    try:
+        localization_score, localization_score_log = areawise_score(gt_file, pred_file, score_fn, area, 'geojson', v)
+        classification_score, classification_score_log = total_area_score(gt_file, pred_file, area, 'geojson', v)
+    except Exception as e:
+        return jsonify({'score': 0.0, 'log': log + str(e)}), 500
 
-    elif method == 'object':
-        try:
-            score, score_log = objectwise_score(gt_file, pred_file, area, score_fn, iou, v)
-        except Exception as e:
-            return jsonify({'score': 0.0, 'log': log + str(e)}), 500
-
-    elif method == 'point':
-        try:
-            score, score_log = objectwise_point_score(gt_file, pred_file, area, score_fn, v)
-        except Exception as e:
-            return jsonify({'score': 0.0, 'log': log + str(e)}), 500
-    elif method == 'total_area':
-        try:
-            score, score_log = total_area_score(gt_file, pred_file, area, filetype, v)
-        except Exception as e:
-            return jsonify({'score': 0.0, 'log': log + str(e)}), 500
-
-    else:
-        res = jsonify({'score': 0.0, 'log': f'Invalid method {method}. Expected: area/object/point'}), 400
-        return res
-
-    log += score_log
+    log += localization_score_log + classification_score_log
     log += 'Execution time: ' + str(time.time() - start_time)
     if v:
-        return jsonify({'score': score, 'log': log})
+        return jsonify({'localization_score': localization_score,
+                        'classification_score': classification_score,
+                        'log': log})
     else:
-        return jsonify({'score': score})
+        return jsonify({'localization_score': localization_score,
+                        'classification_score': classification_score})
     # return the data dictionary as a JSON response
 
 
@@ -114,19 +96,6 @@ def parse_request(request):
     """
     log = ''
 
-    method = request.args.get('method')
-    filetype = request.args.get('filetype', default='tif')
-
-    if method == 'object':
-        try:
-            iou = float(request.args.get('iou'))
-            assert 1.0 > iou > 0.0, "IoU must be from 0 to 1"
-        except Exception:
-            log += "Iou is not specified correctly, using default value 0.5\n"
-            iou = 0.5
-            # raise Exception("Invalid request: iou is expected to be valid float\n" + str(e))
-    else:
-        iou = None
     v = request.args.get('v') in ['True', 'true', 'yes', 'Yes', 'y', 'Y']
 
     # if function is not specified, f1-score is used. It may be not necessary for the method, so it is not required
@@ -163,7 +132,7 @@ def parse_request(request):
     gt_file = request.files['gt']
     pred_file = request.files['pred']
 
-    return gt_file, pred_file, area, method, score_fn, iou, filetype, v, log
+    return gt_file, pred_file, score_fn, area, v, log
 
 
 if __name__ == '__main__':
