@@ -6,7 +6,7 @@ from geoscore.proc import get_geom, cut_by_area
 from shapely.geometry import Polygon, MultiPolygon
 
 
-def total_area_score(gt_file, pred_file, area=None, v: bool = False):
+def total_area_score(gt, pred, area=None, v: bool = False):
     """
     Specific area score for all the classes together
     Args:
@@ -24,18 +24,19 @@ def total_area_score(gt_file, pred_file, area=None, v: bool = False):
     properties = []
     gt_polygons = []
     pred_polygons = []
+    print('Begin calc total area score')
     try:
-        gt = geojson.load(gt_file)
+        #gt = geojson.load(gt_file)
         # GT is always as polygons, not points
 
         # Find all classes
-        for feat in gt:
+        for feat in gt.features:
             if 'class_id' in feat['properties'].keys():
                 if feat['properties']['class_id'] not in properties:
                     properties.append(feat['properties']['class_id'])
-        print(properties)
+        print(f'List of classes: properties')
         for prop in properties:
-            gt_polygons.append(get_geom(gt, 'polygon', {'class_id': prop}))
+            gt_polygons.append(get_geom(gt, 'polygon', classes={'class_id': prop}))
 
         if v:
             log += "Read groundtruth geojson, contains " + str(len(gt_polygons)) + " polygons \n"
@@ -43,9 +44,9 @@ def total_area_score(gt_file, pred_file, area=None, v: bool = False):
         raise Exception(log + 'Failed to read groundtruth file as geojson\n' + str(e))
 
     try:
-        pred = geojson.load(pred_file)
+        #pred = geojson.load(pred_file)
         for prop in properties:
-            pred_polygons = get_geom(pred, 'polygon', {'class_id': prop})
+            pred_polygons.append(get_geom(pred, 'polygon', classes={'class_id': prop}))
         if v:
             log += "Read predicted geojson, contains " + str(len(pred_polygons)) + " objects \n"
     except Exception as e:
@@ -54,6 +55,8 @@ def total_area_score(gt_file, pred_file, area=None, v: bool = False):
     all_class_scores = []
     areas = []
     for prop, gt_class, pred_class in zip(properties, gt_polygons, pred_polygons):
+        print(f'Class {prop}')
+
         if area:
             try:
                 gt_class = cut_by_area(gt_class, area, True)
@@ -72,8 +75,9 @@ def total_area_score(gt_file, pred_file, area=None, v: bool = False):
         areas.append(MultiPolygon(gt_class).area)
         log += score_log
 
-    print(areas)
-    print(all_class_scores)
+        print(areas[-1])
+        print(score)
+
 
     # Calculate weighted average
     avg_score = np.sum([area*score for area,score in zip(areas, all_class_scores)])/np.sum(areas)
@@ -107,7 +111,7 @@ def calc_total_area_vector(gt: List[Polygon], pred: List[Polygon], v: bool = Tru
     if gt_area == 0:
         score = 0
     else:
-        score = 1 - abs(pred_area-gt_area)/gt_area
+        score = 1 - abs(pred_area-gt_area)/(gt_area + pred_area)
 
     if v:
         log = f'Ground truth area = {gt_area}, predicted area = {pred_area}. \n'

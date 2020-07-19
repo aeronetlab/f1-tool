@@ -9,7 +9,7 @@ import aeronet.dataset as ds
 from time import time
 
 
-def areawise_score(gt_file, pred_file, score_fn, area=None, filetype='tif', v: bool = False):
+def areawise_score(gt, pred, score_fn, area=None, v: bool = False):
     """
 
     Args:
@@ -25,84 +25,41 @@ def areawise_score(gt_file, pred_file, score_fn, area=None, filetype='tif', v: b
     """
 
     log = ''
-    if filetype == 'geojson':
-        try:
-            pred = geojson.load(pred_file)
-            pred_polygons = get_geom(pred, 'polygon')
-            if v:
-                log += "Read predicted geojson, contains " + str(len(pred_polygons)) + " objects \n"
-        except Exception as e:
-            raise Exception(log + 'Failed to read prediction file as geojson\n' + str(e))
-
-        try:
-            gt = geojson.load(gt_file)
-            # GT is always as polygons, not points
-            gt_polygons = get_geom(gt, 'polygon')
-            if v:
-                log += "Read groundtruth geojson, contains " + str(len(gt_polygons)) + " polygons \n"
-        except Exception as e:
-            raise Exception(log + 'Failed to read groundtruth file as geojson\n' + str(e))
-
-
-        # For techinspec we ignore area cutting because the areas already match. But we need the area to calculate
-        # accuracy properly, so we cannot skip the area argument
-        if area:
-            try:
-                gt_polygons = cut_by_area(gt_polygons, area, True)
-                pred_polygons = cut_by_area(pred_polygons, area, True)
-            except Exception as e:
-                log += "Intersection cannot be calculated, ignoring area \n" \
-                       + str(e) + '\n'
-
-            log += "Cut vector data by specified area:\n" + \
-                   str(len(gt_polygons)) + " groundtruth and " + \
-                   str(len(pred_polygons)) + " predicted polygons inside\n"
-
-
-
-        score, score_log = areawise_vector_score(gt_polygons, pred_polygons, score_fn, area, v)
-
-    else:  # tif or any other (default) value
-        try:
-            with rasterio.open(gt_file) as src:
-                gt_img = src.read(1)
-                if v:
-                    log += "Read groundtruth image, size = " + str(gt_img.shape) + "\n"
-            with rasterio.open(pred_file) as src:
-                # reading into the pre-allocated array guarantees equal sizes
-                pred_img = np.empty(gt_img.shape, dtype=src.dtypes[0])
-                src.read(1, out=pred_img)
-                if v:
-                    log += "Read predicted image, size = " + str(src.width) + ', ' + str(src.height) \
-                           + ', reshaped to size of GT image \n'
-            score, score_log = pixelwise_raster_score(gt_img, pred_img, score_fn, v)
-        except Exception as e:
-            raise Exception(log + 'Failed to read input file as raster\n' + str(e))
-    return score, log + score_log
-
-
-def pixelwise_raster_score(groundtruth_array, predicted_array, score_fn, v: bool = False):
-    """
-    Calculates f1-score for 2 equal-sized arrays
-    :param groundtruth_array:
-    :param predicted_array:
-    :param v: is_verbose
-    :return: float, f1-score and string, log
-    """
-    log = ''
-    assert groundtruth_array.shape == predicted_array.shape, "Images has different sizes"
-    groundtruth_array[groundtruth_array > 0] = 1
-    predicted_array[predicted_array > 0] = 1
-
-    tp = np.logical_and(groundtruth_array, predicted_array).sum()
-    fn = int(groundtruth_array.sum() - tp)
-    fp = int(predicted_array.sum() - tp)
-    tn = groundtruth_array.size - tp - fp - fn
-
-    score = score_fn(tp, fp, tn, fn)
+    #try:
+    #pred = geojson.load(pred_file)
+    pred_polygons = get_geom(pred, 'polygon')
     if v:
-        log = 'True Positive = ' + str(tp) + ', False Negative = ' + str(fn) + ', False Positive = ' + str(fp) + '\n'
-    return score, log
+        log += "Read predicted geojson, contains " + str(len(pred_polygons)) + " objects \n"
+    #except Exception as e:
+    #    raise Exception(log + 'Failed to read prediction file as geojson\n' + str(e))
+
+    try:
+        #gt = geojson.load(gt_file)
+        # GT is always as polygons, not points
+        gt_polygons = get_geom(gt, 'polygon')
+        if v:
+            log += "Read groundtruth geojson, contains " + str(len(gt_polygons)) + " polygons \n"
+    except Exception as e:
+        raise Exception(log + 'Failed to read groundtruth file as geojson\n' + str(e))
+
+
+    # For techinspec we ignore area cutting because the areas already match. But we need the area to calculate
+    # accuracy properly, so we cannot skip the area argument
+    if area:
+        try:
+            gt_polygons = cut_by_area(gt_polygons, area, True)
+            pred_polygons = cut_by_area(pred_polygons, area, True)
+        except Exception as e:
+            log += "Intersection cannot be calculated, ignoring area \n" \
+                   + str(e) + '\n'
+
+        log += "Cut vector data by specified area:\n" + \
+               str(len(gt_polygons)) + " groundtruth and " + \
+               str(len(pred_polygons)) + " predicted polygons inside\n"
+
+    score, score_log = areawise_vector_score(gt_polygons, pred_polygons, score_fn, area, v)
+
+    return score, log + score_log
 
 
 def areawise_vector_score(gt: List[Polygon], pred: List[Polygon], score_fn, area=None, v: bool = True):

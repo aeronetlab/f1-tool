@@ -42,7 +42,7 @@ def evaluate():
 
     start_time = time.time()
     try:
-        gt_file, pred_file, area, score_fn, v, log = parse_request(
+        gt_file, pred_file, score_fn, area, v, log = parse_request(
             flask.request)
     except Exception as e:
         res = jsonify({'score': 0.0, 'log': 'Invalid request:' + str(e)}), 400
@@ -55,11 +55,19 @@ def evaluate():
     Maybe derive the filetype from the extension? Makes sense, if the filename is preserved during the transition
     '''
 
-    try:
-        localization_score, localization_score_log = areawise_score(gt_file, pred_file, score_fn, area, 'geojson', v)
-        classification_score, classification_score_log = total_area_score(gt_file, pred_file, area, 'geojson', v)
-    except Exception as e:
-        return jsonify({'score': 0.0, 'log': log + str(e)}), 500
+    #try:
+
+    pred = geojson.load(pred_file)
+    gt = geojson.load(gt_file)
+
+    localization_score, localization_score_log = areawise_score(gt, pred, score_fn, area, v)
+    print("LOC SCORE = " + str(localization_score))
+
+    classification_score, classification_score_log = total_area_score(gt, pred, area, v)
+    print("CLASS_SCORE = " + str(classification_score))
+    #except Exception as e:
+    #    print(e)
+    #    return jsonify({'score': 0.0, 'log': log + str(e)}), 500
 
     log += localization_score_log + classification_score_log
     log += 'Execution time: ' + str(time.time() - start_time)

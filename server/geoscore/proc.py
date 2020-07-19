@@ -7,7 +7,7 @@ from shapely.geometry import MultiPolygon, Polygon, Point,  asShape
 # Vector preprocessing functions
 
 
-def get_geom(json, geom_type='polygon', property=None):
+def get_geom(json, geom_type='polygon', classes=None):
     """
 
     Extracts all the polygons from the geojson object and reproject them to lat-lon crs
@@ -31,18 +31,17 @@ def get_geom(json, geom_type='polygon', property=None):
     points = [] # type: List[Point]
 
     # the crs may be specified by the geojson standard or as 'crs':'EPSG:____', we should accept both
-    print(json['crs'])
     try:
         src_crs = CRS.from_user_input(json['crs'])
     except CRSError as e:
-        print(str(e))
+        print('Unknown CRS ' + str(e))
         src_crs = json['crs']['properties']['name']
 
     # then we will reproject all to lat-lon (EPSG:4326)
     dst_crs = 'EPSG:4326'
 
-    if property is not None:
-        features = [feat for feat in json.features if property <= feat['properties']]
+    if classes is not None:
+        features = [feat for feat in json.features if all([item in feat['properties'].items() for item in classes.items()])]
     else:
         features = json.features
     for f in features:
@@ -109,7 +108,6 @@ def cut_by_area(polygons, area, cut_features=False):
                     new_polygons.append(new_poly)
                 elif isinstance(new_poly, MultiPolygon):
                     new_polygons += [p for p in new_poly]
-                    print([p for p in new_poly])
 
     return new_polygons
 
