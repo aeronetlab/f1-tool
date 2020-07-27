@@ -9,6 +9,8 @@ URL = 'http://0.0.0.0:5000/f1'
 @click.argument("predicted_path", type=click.Path(exists=True))
 @click.option("--score_fn", required=True, type=str, default='')
 @click.option("-v", is_flag=True, help='Enables verbose output')
+@click.option("-l", is_flag=True, help='Calculates localization score')
+@click.option("-c", is_flag=True, help='Calculates classification score')
 @click.option("--url", default=URL, help='Specifies url instead of default')
 #@click.option("--logfile", required=False, help='Log file for saving all the application output')
 @click.option("--area", default=None, help='Specifies area')
@@ -17,6 +19,8 @@ def command(groundtruth_path,
             predicted_path,
             score_fn='',
             v=False,
+            l=False,
+            c=False,
             url=URL, area=None,
             bbox=None):
 
@@ -37,8 +41,10 @@ def command(groundtruth_path,
     if response.status_code != 200:
         print("Error " + str(response.status_code))
     else:
-        print(f'Localization score = %.3f' % response.json()['localization_score'])
-        print(f'Classification score = %.3f' % response.json()['classification_score'])
+        if l:
+            print(f'Localization score = %.3f' % response.json()['localization_score'])
+        if c:
+            print(f'Classification score = %.3f' % response.json()['classification_score'])
 
 
 if __name__ == '__main__':
