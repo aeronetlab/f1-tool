@@ -80,6 +80,8 @@ def total_area_score(gt, pred, area=None, v: bool = False):
 
 
     # Calculate weighted average
+    if np.sum(areas) == 0:
+        return 0, log + ' All areas are zero, score cannot be calculated'
     avg_score = np.sum([area*score for area,score in zip(areas, all_class_scores)])/np.sum(areas)
     return avg_score, log
 

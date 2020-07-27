@@ -23,7 +23,9 @@ def command(groundtruth_path,
             c=False,
             url=URL, area=None,
             bbox=None):
-
+    if not c and not l:
+        c=True
+        l=True
     if v:
         print(f'Calculating {score_fn} for files:\n ground truth %s \n prediction %s' %(groundtruth_path, predicted_path))
 
