@@ -29,7 +29,8 @@ def command(groundtruth_path,
     if v:
         print(f'Calculating {score_fn} for files:\n ground truth %s \n prediction %s' %(groundtruth_path, predicted_path))
 
-    params = {'v': v, 'score_fn': score_fn}
+    params = {'v': v, 'l': l, 'c': c, 'score_fn': score_fn}
+
     if bbox:
         params['bbox'] = bbox
     files = {'gt': open(groundtruth_path, 'rb'),

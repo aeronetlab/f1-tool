@@ -42,7 +42,7 @@ def evaluate():
 
     start_time = time.time()
     try:
-        gt_file, pred_file, score_fn, area, v, log = parse_request(
+        gt_file, pred_file, score_fn, area, v, calc_class_score, calc_loc_score, log = parse_request(
             flask.request)
     except Exception as e:
         res = jsonify({'score': 0.0, 'log': 'Invalid request:' + str(e)}), 400
@@ -59,12 +59,17 @@ def evaluate():
 
     pred = geojson.load(pred_file)
     gt = geojson.load(gt_file)
+    if calc_loc_score:
+        localization_score, localization_score_log = areawise_score(gt, pred, score_fn, area, v)
+        print("LOC SCORE = " + str(localization_score))
+    else:
+        localization_score, localization_score_log = None, ''
+    if calc_class_score:
+        classification_score, classification_score_log = total_area_score(gt, pred, area, v)
+        print("CLASS_SCORE = " + str(classification_score))
+    else:
+        classification_score, classification_score_log = None, ''
 
-    localization_score, localization_score_log = areawise_score(gt, pred, score_fn, area, v)
-    print("LOC SCORE = " + str(localization_score))
-
-    classification_score, classification_score_log = total_area_score(gt, pred, area, v)
-    print("CLASS_SCORE = " + str(classification_score))
     #except Exception as e:
     #    print(e)
     #    return jsonify({'score': 0.0, 'log': log + str(e)}), 500
@@ -105,6 +110,8 @@ def parse_request(request):
     log = ''
 
     v = request.args.get('v') in ['True', 'true', 'yes', 'Yes', 'y', 'Y']
+    calc_class_score = request.args.get('c') in ['True', 'true', 'yes', 'Yes', 'y', 'Y']
+    calc_loc_score = request.args.get('l') in ['True', 'true', 'yes', 'Yes', 'y', 'Y']
 
     # if function is not specified, f1-score is used. It may be not necessary for the method, so it is not required
     score_fn = request.args.get('score_fn')
@@ -140,7 +147,7 @@ def parse_request(request):
     gt_file = request.files['gt']
     pred_file = request.files['pred']
 
-    return gt_file, pred_file, score_fn, area, v, log
+    return gt_file, pred_file, score_fn, area, v, calc_class_score, calc_loc_score, log
 
 
 if __name__ == '__main__':
